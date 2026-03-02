@@ -1,0 +1,5 @@
+{
+  "name": "Havenly",
+  "description": "A minimalistic aesthetic AI home dashboard hub.",
+  "requestFramePermissions": ["microphone"]
+}

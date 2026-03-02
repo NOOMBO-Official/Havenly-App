@@ -1,0 +1,49 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@300;400;500;600&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --color-aura-bg: var(--bg-color);
+  --color-aura-text: var(--text-primary);
+  --color-aura-muted: var(--text-secondary);
+  --color-aura-border: var(--border-color);
+  --color-aura-card: var(--card-bg);
+  --color-aura-card-hover: var(--card-hover);
+}
+
+:root {
+  --bg-color: #050505;
+  --text-primary: #f5f5f5;
+  --text-secondary: rgba(245, 245, 245, 0.5);
+  --border-color: rgba(255, 255, 255, 0.1);
+  --card-bg: rgba(255, 255, 255, 0.05);
+  --card-hover: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="light"] {
+  --bg-color: #f5f5f0;
+  --text-primary: #1a1a1a;
+  --text-secondary: rgba(26, 26, 26, 0.5);
+  --border-color: rgba(0, 0, 0, 0.1);
+  --card-bg: rgba(0, 0, 0, 0.03);
+  --card-hover: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="midnight"] {
+  --bg-color: #0a0a1a;
+  --text-primary: #e0e0ff;
+  --text-secondary: rgba(224, 224, 255, 0.5);
+  --border-color: rgba(224, 224, 255, 0.1);
+  --card-bg: rgba(224, 224, 255, 0.05);
+  --card-hover: rgba(224, 224, 255, 0.1);
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  transition:
+    background-color 0.5s ease,
+    color 0.5s ease;
+}
