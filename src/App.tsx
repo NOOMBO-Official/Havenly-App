@@ -5,6 +5,7 @@ import SettingsPanel from "./components/SettingsPanel";
 import DynamicIsland from "./components/DynamicIsland";
 import ControlCenter from "./components/ControlCenter";
 import AppStore from "./components/AppStore";
+import AiChatModal from "./components/AiChatModal";
 import WelcomeScreen from "./components/WelcomeScreen";
 import Onboarding from "./components/Onboarding";
 import WidgetGrid from "./components/WidgetGrid";
@@ -13,10 +14,13 @@ import { SettingsProvider, useSettings } from "./contexts/SettingsContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { SmartHomeProvider } from "./contexts/SmartHomeContext";
 import { AiProvider } from "./contexts/AiContext";
+import { MessageSquare } from "lucide-react";
+import { useState } from "react";
 
 function Dashboard() {
   const { settings } = useSettings();
   const { user, loading } = useAuth();
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   if (loading) {
     return <div className="min-h-screen bg-aura-bg flex items-center justify-center text-aura-text">Loading...</div>;
@@ -40,6 +44,12 @@ function Dashboard() {
             <div className="flex-1 max-w-md">
               <AiInsight />
             </div>
+            <button
+              onClick={() => setIsChatOpen(true)}
+              className="p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl backdrop-blur-xl transition-all hover:scale-105 active:scale-95 text-white/70 hover:text-white"
+            >
+              <MessageSquare className="w-6 h-6" />
+            </button>
             <AppStore />
             <ControlCenter />
             <SettingsPanel />
@@ -53,6 +63,7 @@ function Dashboard() {
       </div>
       <DynamicIsland />
       <AiWaveform />
+      <AiChatModal isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
     </div>
   );
 }
