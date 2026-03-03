@@ -47,6 +47,7 @@ export function AiProvider({ children }: { children: ReactNode }) {
   const wakeProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const pcmRingBufferRef = useRef<Float32Array[]>([]);
   const wakeEnabledRef = useRef(true);
+  const speechEngineSupportedRef = useRef(true);
 
   // ================= SMART HOME FUNCTION =================
   const controlSmartHomeFunction: FunctionDeclaration = {
@@ -95,6 +96,20 @@ export function AiProvider({ children }: { children: ReactNode }) {
 
     let isRecognizing = false;
 
+    const startRecognition = () => {
+      if (statusRef.current === 'idle' && !isRecognizing && wakeEnabledRef.current && speechEngineSupportedRef.current) {
+        try {
+          recognition.start();
+        } catch (e: any) {
+          if (e.name !== 'InvalidStateError') {
+            console.error("Failed to start speech recognition:", e);
+            speechEngineSupportedRef.current = false;
+            isRecognizing = false;
+          }
+        }
+      }
+    };
+
     recognition.onstart = () => {
       isRecognizing = true;
     };
@@ -141,31 +156,31 @@ export function AiProvider({ children }: { children: ReactNode }) {
     recognition.onerror = (event: any) => {
       if (event.error === 'aborted' || event.error === 'no-speech') return;
       console.error("Speech recognition error:", event.error);
+      
+      // If the speech engine is missing (common on Android WebViews) or not allowed,
+      // disable wake word detection to prevent spamming the user with native OS error toasts.
+      console.warn("Disabling wake word detection due to speech recognition error.");
+      speechEngineSupportedRef.current = false;
+      isRecognizing = false;
     };
 
     recognition.onend = () => {
       isRecognizing = false;
       if (statusRef.current === 'idle' && wakeEnabledRef.current) {
         setTimeout(() => {
-          if (statusRef.current === 'idle' && !isRecognizing && wakeEnabledRef.current) {
-            try { recognition.start(); } catch (e) {}
-          }
+          startRecognition();
         }, 300);
       }
     };
 
     const keepAliveInterval = setInterval(() => {
-      if (statusRef.current === 'idle' && !isRecognizing && wakeEnabledRef.current) {
-        try { recognition.start(); } catch (e) {}
-      }
+      startRecognition();
     }, 2000);
 
     if (statusRef.current === 'idle' && wakeEnabledRef.current) {
       navigator.mediaDevices.getUserMedia({ audio: true })
         .then(() => {
-          if (statusRef.current === 'idle' && !isRecognizing && wakeEnabledRef.current) {
-            try { recognition.start(); } catch (e) {}
-          }
+          startRecognition();
         })
         .catch((err) => console.error("Microphone permission denied:", err));
     }
