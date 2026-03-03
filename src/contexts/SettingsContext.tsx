@@ -10,6 +10,15 @@ import { useAuth } from "./AuthContext";
 
 type Theme = "dark" | "light" | "midnight";
 
+interface AiWidget {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  icon: string;
+  color: string;
+}
+
 interface Settings {
   theme: Theme;
   userName: string;
@@ -18,6 +27,7 @@ interface Settings {
   activeWidgets: string[];
   layout: { id: string; column: number; order: number }[];
   integrations: Record<string, boolean>;
+  aiWidgets: AiWidget[];
 }
 
 interface SettingsContextType {
@@ -54,6 +64,7 @@ const defaultSettings: Settings = {
     pinterest: false,
     hue: false,
   },
+  aiWidgets: [],
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(

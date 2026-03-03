@@ -30,6 +30,8 @@ import CalendarWidget from "./CalendarWidget";
 import NotionWidget from "./NotionWidget";
 import GoogleCalendarWidget from "./GoogleCalendarWidget";
 import ClockWidget from "./ClockWidget";
+import ThreeDWidget from "./ThreeDWidget";
+import AiGeneratedWidget from "./AiGeneratedWidget";
 import { X, Plus } from 'lucide-react';
 
 const WIDGET_COMPONENTS: Record<string, React.FC<any>> = {
@@ -42,6 +44,7 @@ const WIDGET_COMPONENTS: Record<string, React.FC<any>> = {
   notion: NotionWidget,
   googleCalendar: GoogleCalendarWidget,
   clock: ClockWidget,
+  threed: ThreeDWidget,
 };
 
 interface SortableWidgetProps {
@@ -51,6 +54,7 @@ interface SortableWidgetProps {
 }
 
 function SortableWidget({ id, isEditMode, onRemove }: SortableWidgetProps) {
+  const { settings } = useSettings();
   const {
     attributes,
     listeners,
@@ -68,8 +72,9 @@ function SortableWidget({ id, isEditMode, onRemove }: SortableWidgetProps) {
   };
 
   const Component = WIDGET_COMPONENTS[id];
+  const aiWidget = settings.aiWidgets?.find(w => w.id === id);
 
-  if (!Component) return null;
+  if (!Component && !aiWidget) return null;
 
   return (
     <div ref={setNodeRef} style={style} className="relative group h-full">
@@ -83,7 +88,7 @@ function SortableWidget({ id, isEditMode, onRemove }: SortableWidgetProps) {
       )}
       <div {...(isEditMode ? { ...attributes, ...(listeners || {}) } : {})} className={`h-full transition-transform duration-500 hover:scale-[1.02] ${isEditMode ? "cursor-grab active:cursor-grabbing hover:scale-100" : ""}`}>
         <div className={`h-full ${isEditMode ? "pointer-events-none ring-2 ring-blue-500/50 rounded-[2.5rem]" : ""}`}>
-          <Component />
+          {Component ? <Component /> : aiWidget ? <AiGeneratedWidget {...aiWidget} /> : null}
         </div>
       </div>
     </div>
@@ -204,7 +209,11 @@ export default function WidgetGrid() {
         <DragOverlay>
           {activeId ? (
             <div className="opacity-80 scale-105 shadow-2xl">
-              {React.createElement(WIDGET_COMPONENTS[activeId])}
+              {WIDGET_COMPONENTS[activeId] ? React.createElement(WIDGET_COMPONENTS[activeId]) : (
+                settings.aiWidgets?.find(w => w.id === activeId) ? (
+                  <AiGeneratedWidget {...settings.aiWidgets.find(w => w.id === activeId)!} />
+                ) : null
+              )}
             </div>
           ) : null}
         </DragOverlay>

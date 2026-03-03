@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Plus, Check, Search, LayoutGrid } from "lucide-react";
+import { X, Plus, Check, Search, LayoutGrid, Sparkles, Loader2 } from "lucide-react";
 import { useSettings } from "../contexts/SettingsContext";
+import { GoogleGenAI, Type } from "@google/genai";
 
 interface WidgetLibraryProps {
   isOpen: boolean;
@@ -11,6 +12,9 @@ interface WidgetLibraryProps {
 export default function WidgetLibrary({ isOpen, onClose }: WidgetLibraryProps) {
   const { settings, updateSettings } = useSettings();
   const [search, setSearch] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const generatingRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const availableWidgets = [
     { id: "quickActions", name: "Quick Actions", description: "Control your most used smart home devices.", category: "Smart Home" },
@@ -25,12 +29,84 @@ export default function WidgetLibrary({ isOpen, onClose }: WidgetLibraryProps) {
     { id: "tasks", name: "Tasks", description: "Manage your daily to-do list.", category: "Productivity" },
     { id: "finance", name: "Finance", description: "Track your spending and budgets.", category: "Finance" },
     { id: "health", name: "Health & Fitness", description: "Monitor your daily activity and goals.", category: "Health" },
+    { id: "threed", name: "3D Space", description: "Interactive 3D widget that reacts to your mouse.", category: "Entertainment" },
+    ...(settings.aiWidgets || [])
   ];
 
   const filteredWidgets = availableWidgets.filter(w => 
     w.name.toLowerCase().includes(search.toLowerCase()) || 
     w.description.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleScroll = () => {
+    if (!scrollRef.current || generatingRef.current || search) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    if (scrollHeight - scrollTop - clientHeight < 100) {
+      generateMoreWidgets();
+    }
+  };
+
+  const generateMoreWidgets = async () => {
+    if (generatingRef.current) return;
+    generatingRef.current = true;
+    setIsGenerating(true);
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) return;
+
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: "Generate 2 unique, highly creative smart home or lifestyle widget concepts. Return JSON array of objects with keys: id (unique string), name (string), description (string), category (string), icon (a single emoji), color (hex color code like #3b82f6).",
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                name: { type: Type.STRING },
+                description: { type: Type.STRING },
+                category: { type: Type.STRING },
+                icon: { type: Type.STRING },
+                color: { type: Type.STRING }
+              }
+            }
+          }
+        }
+      });
+
+      let text = response.text?.trim() || "[]";
+      let newWidgets = [];
+      
+      try {
+        newWidgets = JSON.parse(text);
+      } catch (parseErr) {
+        console.warn("JSON parse failed, attempting to repair...", parseErr);
+        // Attempt to repair truncated JSON array
+        const lastBrace = text.lastIndexOf('}');
+        if (lastBrace !== -1) {
+          try {
+            const fixedText = text.substring(0, lastBrace + 1) + ']';
+            newWidgets = JSON.parse(fixedText);
+          } catch (e) {
+            console.error("Could not repair JSON", e);
+          }
+        }
+      }
+
+      if (Array.isArray(newWidgets) && newWidgets.length > 0) {
+        updateSettings({ aiWidgets: [...(settings.aiWidgets || []), ...newWidgets] });
+      }
+    } catch (err) {
+      console.error("Failed to generate widgets", err);
+    } finally {
+      generatingRef.current = false;
+      setIsGenerating(false);
+    }
+  };
 
   const toggleWidget = (id: string) => {
     const isActive = settings.activeWidgets.includes(id);
@@ -94,10 +170,16 @@ export default function WidgetLibrary({ isOpen, onClose }: WidgetLibraryProps) {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-aura-bg">
+            <div 
+              ref={scrollRef}
+              onScroll={handleScroll}
+              className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-aura-bg"
+            >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredWidgets.map((widget) => {
                   const isActive = settings.activeWidgets.includes(widget.id);
+                  const isAi = settings.aiWidgets?.some(w => w.id === widget.id);
+                  
                   return (
                     <div 
                       key={widget.id}
@@ -109,7 +191,10 @@ export default function WidgetLibrary({ isOpen, onClose }: WidgetLibraryProps) {
                     >
                       <div className="flex justify-between items-start mb-2">
                         <div>
-                          <h3 className="text-lg font-medium text-aura-text">{widget.name}</h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-medium text-aura-text">{widget.name}</h3>
+                            {isAi && <Sparkles className="w-3 h-3 text-purple-400" />}
+                          </div>
                           <span className="text-[10px] uppercase tracking-wider text-aura-muted px-2 py-1 bg-white/5 rounded-md mt-1 inline-block">
                             {widget.category}
                           </span>
@@ -130,6 +215,13 @@ export default function WidgetLibrary({ isOpen, onClose }: WidgetLibraryProps) {
                   );
                 })}
               </div>
+              
+              {isGenerating && (
+                <div className="flex flex-col items-center justify-center p-8 text-aura-muted mt-4 border border-dashed border-white/10 rounded-2xl bg-black/20">
+                  <Loader2 className="w-6 h-6 animate-spin mb-2 text-purple-500" />
+                  <p className="text-sm">AI is generating new widgets...</p>
+                </div>
+              )}
             </div>
           </motion.div>
         </>

@@ -17,8 +17,19 @@ import { useSettings } from "../contexts/SettingsContext";
 export default function ControlCenter() {
   const { settings, updateSettings } = useSettings();
   const [isOpen, setIsOpen] = useState(false);
-  const [brightness, setBrightness] = useState(80);
+  const [brightness, setBrightness] = useState(100);
   const [volume, setVolume] = useState(50);
+
+  useEffect(() => {
+    document.documentElement.style.filter = `brightness(${brightness}%)`;
+  }, [brightness]);
+
+  useEffect(() => {
+    const mediaElements = document.querySelectorAll('audio, video');
+    mediaElements.forEach((el) => {
+      (el as HTMLMediaElement).volume = volume / 100;
+    });
+  }, [volume]);
 
   const modalRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);

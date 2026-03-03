@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Store, X, Play, Download, Star } from 'lucide-react';
+import OutfitStylerApp from './OutfitStylerApp';
 
 const APPS = [
   { id: '6', name: 'AI Outfit Styler', category: 'Lifestyle', rating: 4.9, icon: '👗', installed: false },
@@ -14,9 +15,17 @@ const APPS = [
 export default function AppStore() {
   const [isOpen, setIsOpen] = useState(false);
   const [apps, setApps] = useState(APPS);
+  const [activeApp, setActiveApp] = useState<string | null>(null);
 
   const toggleInstall = (id: string) => {
     setApps(apps.map(app => app.id === id ? { ...app, installed: !app.installed } : app));
+  };
+
+  const handleRun = (id: string) => {
+    if (id === '6') {
+      setActiveApp('outfit-styler');
+      setIsOpen(false);
+    }
   };
 
   return (
@@ -79,7 +88,10 @@ export default function AppStore() {
                     <div className="flex items-center space-x-3 mt-4">
                       {app.installed ? (
                         <>
-                          <button className="flex-1 flex items-center justify-center space-x-2 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors shadow-[0_0_15px_rgba(59,130,246,0.3)]">
+                          <button 
+                            onClick={() => handleRun(app.id)}
+                            className="flex-1 flex items-center justify-center space-x-2 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors shadow-[0_0_15px_rgba(59,130,246,0.3)]"
+                          >
                             <Play className="w-4 h-4 fill-current" />
                             <span>Run</span>
                           </button>
@@ -107,6 +119,11 @@ export default function AppStore() {
           </>
         )}
       </AnimatePresence>
+
+      <OutfitStylerApp 
+        isOpen={activeApp === 'outfit-styler'} 
+        onClose={() => setActiveApp(null)} 
+      />
     </>
   );
 }

@@ -46,6 +46,45 @@ export default function MediaWidget() {
     }
   }, [settings.integrations.spotify]);
 
+  const fetchPlaybackState = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch("https://api.spotify.com/v1/me/player", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 200) {
+        const data = await res.json();
+        if (data && data.item) {
+          setTrack(prev => ({
+            name: data.item.name,
+            artist: data.item.artists.map((a: any) => a.name).join(", "),
+            albumArt: data.item.album.images[0]?.url || "",
+            isPlaying: data.is_playing,
+            progress: data.progress_ms,
+            duration: data.item.duration_ms,
+            volume: data.device?.volume_percent ?? prev?.volume ?? 50,
+          }));
+        } else {
+          setTrack(null);
+        }
+      } else if (res.status === 204) {
+        setTrack(null);
+      } else if (res.status === 401) {
+        fetchToken(); // Token might be expired
+      }
+    } catch (err) {
+      console.error("Failed to fetch playback state", err);
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchPlaybackState();
+      const interval = setInterval(fetchPlaybackState, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [token]);
+
   useEffect(() => {
     if (!token) return;
 
@@ -90,15 +129,15 @@ export default function MediaWidget() {
 
         const currentTrack = state.track_window.current_track;
         if (currentTrack) {
-          setTrack({
+          setTrack(prev => ({
             name: currentTrack.name,
             artist: currentTrack.artists.map((a: any) => a.name).join(", "),
             albumArt: currentTrack.album.images[0]?.url || "",
             isPlaying: !state.paused,
             progress: state.position,
             duration: state.duration,
-            volume: 50, // SDK doesn't report volume in state, we'll manage it separately if needed
-          });
+            volume: prev?.volume ?? 50,
+          }));
         }
       });
 
@@ -143,17 +182,28 @@ export default function MediaWidget() {
     action: "play" | "pause" | "next" | "previous" | "volume",
     value?: number
   ) => {
-    if (!player) return;
+    if (!token) return;
 
     try {
-      if (action === "play") await player.resume();
-      if (action === "pause") await player.pause();
-      if (action === "next") await player.nextTrack();
-      if (action === "previous") await player.previousTrack();
       if (action === "volume" && value !== undefined) {
-        await player.setVolume(value / 100);
+        await fetch(`https://api.spotify.com/v1/me/player/volume?volume_percent=${value}`, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}` },
+        });
         setTrack(prev => prev ? { ...prev, volume: value } : null);
+      } else {
+        await fetch(`https://api.spotify.com/v1/me/player/${action}`, {
+          method: action === "next" || action === "previous" ? "POST" : "PUT",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        
+        // Optimistic update
+        if (track) {
+          if (action === "play") setTrack({ ...track, isPlaying: true });
+          if (action === "pause") setTrack({ ...track, isPlaying: false });
+        }
       }
+      setTimeout(fetchPlaybackState, 500);
     } catch (err) {
       console.error(`Failed to ${action}`, err);
     }
