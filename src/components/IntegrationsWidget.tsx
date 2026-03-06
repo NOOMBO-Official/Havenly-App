@@ -35,7 +35,8 @@ export default function IntegrationsWidget() {
         return;
       }
 
-      const response = await fetch("/api/auth/spotify/url");
+      const redirectUri = `${window.location.origin}/api/auth/spotify/callback`;
+      const response = await fetch(`/api/auth/spotify/url?redirectUri=${encodeURIComponent(redirectUri)}`);
       if (!response.ok) throw new Error("Failed to get auth URL");
       const { url } = await response.json();
 

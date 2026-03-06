@@ -22,17 +22,27 @@ async function startServer() {
   };
 
   app.get("/api/auth/spotify/url", (req, res) => {
-    // Use APP_URL from environment, fallback to localhost for local dev outside container
-    const appUrl = process.env.APP_URL || "http://localhost:3000";
-    const redirectUri = `${appUrl}/api/auth/spotify/callback`;
+    // Use redirectUri from query if provided, otherwise fallback
+    let redirectUri = req.query.redirectUri as string;
+    if (!redirectUri) {
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const appUrl = process.env.APP_URL || `${protocol}://${host}`;
+      redirectUri = `${appUrl.replace(/\/$/, '')}/api/auth/spotify/callback`;
+    }
+    
     const scope =
       "user-read-playback-state user-modify-playback-state user-read-currently-playing streaming app-remote-control user-read-email user-read-private";
+
+    // Pass the redirectUri in the state parameter so we can use it in the callback
+    const state = Buffer.from(JSON.stringify({ redirectUri })).toString('base64');
 
     const params = new URLSearchParams({
       response_type: "code",
       client_id: SPOTIFY_CLIENT_ID,
       scope: scope,
       redirect_uri: redirectUri,
+      state: state,
     });
 
     res.json({
@@ -40,10 +50,26 @@ async function startServer() {
     });
   });
 
-  app.get("/api/auth/spotify/callback", async (req, res) => {
+  app.get(["/api/auth/spotify/callback", "/api/auth/spotify/callback/"], async (req, res) => {
     const code = req.query.code as string;
-    const appUrl = process.env.APP_URL || "http://localhost:3000";
-    const redirectUri = `${appUrl}/api/auth/spotify/callback`;
+    const state = req.query.state as string;
+    
+    let redirectUri = "";
+    try {
+      if (state) {
+        const decodedState = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'));
+        redirectUri = decodedState.redirectUri;
+      }
+    } catch (e) {
+      console.error("Failed to parse state", e);
+    }
+    
+    if (!redirectUri) {
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const appUrl = process.env.APP_URL || `${protocol}://${host}`;
+      redirectUri = `${appUrl.replace(/\/$/, '')}/api/auth/spotify/callback`;
+    }
 
     try {
       const response = await fetch("https://accounts.spotify.com/api/token", {
