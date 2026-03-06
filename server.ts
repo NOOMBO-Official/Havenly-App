@@ -21,6 +21,31 @@ async function startServer() {
     expires_at: null,
   };
 
+  app.get("/api/auth/spotify/redirect", (req, res) => {
+    let redirectUri = req.query.redirectUri as string;
+    if (!redirectUri) {
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const appUrl = process.env.APP_URL || `${protocol}://${host}`;
+      redirectUri = `${appUrl.replace(/\/$/, '')}/api/auth/spotify/callback`;
+    }
+    
+    const scope =
+      "user-read-playback-state user-modify-playback-state user-read-currently-playing streaming app-remote-control user-read-email user-read-private";
+
+    const state = Buffer.from(JSON.stringify({ redirectUri })).toString('base64');
+
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: SPOTIFY_CLIENT_ID,
+      scope: scope,
+      redirect_uri: redirectUri,
+      state: state,
+    });
+
+    res.redirect(`https://accounts.spotify.com/authorize?${params.toString()}`);
+  });
+
   app.get("/api/auth/spotify/url", (req, res) => {
     // Use redirectUri from query if provided, otherwise fallback
     let redirectUri = req.query.redirectUri as string;

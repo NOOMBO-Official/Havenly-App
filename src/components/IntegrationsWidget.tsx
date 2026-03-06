@@ -22,25 +22,18 @@ export default function IntegrationsWidget() {
     }
   }, [settings.integrations.spotify]);
 
-  const handleConnectSpotify = async () => {
+  const handleConnectSpotify = () => {
     try {
+      const redirectUri = `${window.location.origin}/api/auth/spotify/callback`;
       const authWindow = window.open(
-        "",
+        `/api/auth/spotify/redirect?redirectUri=${encodeURIComponent(redirectUri)}`,
         "spotify_oauth",
         "width=600,height=700",
       );
       
       if (!authWindow) {
         alert("Please allow popups for this site to connect your account.");
-        return;
       }
-
-      const redirectUri = `${window.location.origin}/api/auth/spotify/callback`;
-      const response = await fetch(`/api/auth/spotify/url?redirectUri=${encodeURIComponent(redirectUri)}`);
-      if (!response.ok) throw new Error("Failed to get auth URL");
-      const { url } = await response.json();
-
-      authWindow.location.href = url;
     } catch (error) {
       console.error("OAuth error:", error);
     }
