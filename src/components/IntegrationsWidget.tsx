@@ -24,18 +24,22 @@ export default function IntegrationsWidget() {
 
   const handleConnectSpotify = async () => {
     try {
+      const authWindow = window.open(
+        "",
+        "spotify_oauth",
+        "width=600,height=700",
+      );
+      
+      if (!authWindow) {
+        alert("Please allow popups for this site to connect your account.");
+        return;
+      }
+
       const response = await fetch("/api/auth/spotify/url");
       if (!response.ok) throw new Error("Failed to get auth URL");
       const { url } = await response.json();
 
-      const authWindow = window.open(
-        url,
-        "spotify_oauth",
-        "width=600,height=700",
-      );
-      if (!authWindow) {
-        alert("Please allow popups for this site to connect your account.");
-      }
+      authWindow.location.href = url;
     } catch (error) {
       console.error("OAuth error:", error);
     }
