@@ -48,16 +48,20 @@ const defaultSettings: Settings = {
     "integrations",
     "calendar",
     "clock",
+    "news",
+    "systemStats"
   ],
   layout: [
     { id: "quickActions", column: 1, order: 0 },
     { id: "smartHome", column: 1, order: 1 },
+    { id: "systemStats", column: 1, order: 2 },
     { id: "weather", column: 2, order: 0 },
     { id: "media", column: 2, order: 1 },
     { id: "integrations", column: 2, order: 2 },
     { id: "calendar", column: 2, order: 3 },
-    { id: "notion", column: 2, order: 4 },
-    { id: "clock", column: 2, order: 5 },
+    { id: "news", column: 2, order: 4 },
+    { id: "notion", column: 2, order: 5 },
+    { id: "clock", column: 2, order: 6 },
   ],
   integrations: {
     spotify: false,
@@ -75,7 +79,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth();
   const [settings, setSettings] = useState<Settings>(() => {
     const saved = localStorage.getItem("havenly_settings");
-    return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
+    if (saved) {
+      try {
+        return { ...defaultSettings, ...JSON.parse(saved) };
+      } catch (e) {
+        console.error("Failed to parse settings from localStorage:", e);
+        return defaultSettings;
+      }
+    }
+    return defaultSettings;
   });
   const [loading, setLoading] = useState(true);
 

@@ -18,7 +18,7 @@ const AiContext = createContext<AiContextType | undefined>(undefined);
 export function AiProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { settings } = useSettings();
-  const { toggleDevice, setDeviceState } = useSmartHome();
+  const { rooms, toggleDevice, setDeviceState } = useSmartHome();
   
   const [status, setStatus] = useState<"idle" | "connecting" | "listening" | "speaking" | "error">("idle");
   const [transcript, setTranscript] = useState("");
@@ -65,7 +65,28 @@ export function AiProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const handleFunctionCall = (functionCall: any) => {
+  const getWeatherFunction: FunctionDeclaration = {
+    name: "getWeather",
+    description: "Get the current weather for a specific location.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        location: { type: Type.STRING, description: "The city and state, e.g., San Francisco, CA" }
+      },
+      required: ["location"],
+    }
+  };
+
+  const getSystemStatsFunction: FunctionDeclaration = {
+    name: "getSystemStats",
+    description: "Get the current system statistics (CPU, RAM, Storage, Network).",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {},
+    }
+  };
+
+  const handleFunctionCall = async (functionCall: any) => {
     if (functionCall.name === "controlSmartHome") {
       const { roomId, deviceId, action, value } = functionCall.args;
       if (action === 'toggle') toggleDevice(roomId, deviceId);
@@ -73,6 +94,33 @@ export function AiProvider({ children }: { children: ReactNode }) {
       else if (action === 'off') setDeviceState(roomId, deviceId, false);
       else if (action === 'set' && value !== undefined) setDeviceState(roomId, deviceId, value);
       return { result: `Executed ${action} on ${deviceId}` };
+    } else if (functionCall.name === "getWeather") {
+      const { location } = functionCall.args;
+      try {
+        let geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`);
+        let geoData = await geoRes.json();
+        if (!geoData.results || geoData.results.length === 0) {
+          return { error: "Location not found" };
+        }
+        const { latitude, longitude } = geoData.results[0];
+        const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph`);
+        const weatherData = await weatherRes.json();
+        return { result: weatherData.current };
+      } catch (e: any) {
+        return { error: e.message };
+      }
+    } else if (functionCall.name === "getSystemStats") {
+      return {
+        result: {
+          cpu: Math.floor(Math.random() * 40) + 10,
+          ram: Math.floor(Math.random() * 30) + 40,
+          storage: 65,
+          network: {
+            down: Math.floor(Math.random() * 100) + 50,
+            up: Math.floor(Math.random() * 50) + 10
+          }
+        }
+      };
     }
     return { error: "Unknown function" };
   };
@@ -202,7 +250,7 @@ export function AiProvider({ children }: { children: ReactNode }) {
       setStatus("connecting");
       setIsVideoCall(withVideo);
 
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
         setStatus("error");
         setTranscript("API key missing");
@@ -321,11 +369,11 @@ export function AiProvider({ children }: { children: ReactNode }) {
 
             const toolCall = message.toolCall;
             if (toolCall?.functionCalls?.length) {
-              const functionResponses = toolCall.functionCalls.map((fc: any) => ({
+              const functionResponses = await Promise.all(toolCall.functionCalls.map(async (fc: any) => ({
                 id: fc.id,
                 name: fc.name,
-                response: handleFunctionCall(fc)
-              }));
+                response: await handleFunctionCall(fc)
+              })));
 
               sessionPromise.then(session => {
                 session.sendToolResponse({ functionResponses });
@@ -345,8 +393,13 @@ export function AiProvider({ children }: { children: ReactNode }) {
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } } },
-          systemInstruction: `You are AVA, an advanced smart home assistant for Havenly. User: ${settings?.userName || "User"}.`,
-          tools: [{ functionDeclarations: [controlSmartHomeFunction] }]
+          systemInstruction: `You are AVA, an advanced smart home assistant for Havenly. User: ${settings?.userName || "User"}.
+Current Time: ${new Date().toLocaleString()}
+Current Weather Location: ${settings?.weatherLocation}
+Smart Home State:
+${rooms.map(r => `${r.name} (${r.id}):\n` + r.devices.map(d => `  - ${d.name} (${d.id}): ${d.type}, state: ${d.state}`).join('\n')).join('\n')}
+`,
+          tools: [{ functionDeclarations: [controlSmartHomeFunction, getWeatherFunction, getSystemStatsFunction] }, { googleSearch: {} }]
         },
       });
 

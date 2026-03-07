@@ -33,7 +33,7 @@ async function startServer() {
     const scope =
       "user-read-playback-state user-modify-playback-state user-read-currently-playing streaming app-remote-control user-read-email user-read-private";
 
-    const state = Buffer.from(JSON.stringify({ redirectUri })).toString('base64');
+    const state = Buffer.from(JSON.stringify({ redirectUri })).toString('base64url');
 
     const params = new URLSearchParams({
       response_type: "code",
@@ -60,7 +60,7 @@ async function startServer() {
       "user-read-playback-state user-modify-playback-state user-read-currently-playing streaming app-remote-control user-read-email user-read-private";
 
     // Pass the redirectUri in the state parameter so we can use it in the callback
-    const state = Buffer.from(JSON.stringify({ redirectUri })).toString('base64');
+    const state = Buffer.from(JSON.stringify({ redirectUri })).toString('base64url');
 
     const params = new URLSearchParams({
       response_type: "code",
@@ -82,7 +82,7 @@ async function startServer() {
     let redirectUri = "";
     try {
       if (state) {
-        const decodedState = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'));
+        const decodedState = JSON.parse(Buffer.from(state, 'base64url').toString('utf-8'));
         redirectUri = decodedState.redirectUri;
       }
     } catch (e) {
@@ -193,6 +193,70 @@ async function startServer() {
       expires_at: null,
     };
     res.json({ success: true });
+  });
+
+  app.get("/api/test-env", (req, res) => {
+    res.json({
+      gemini: process.env.GEMINI_API_KEY,
+      api: process.env.API_KEY
+    });
+  });
+
+  app.get("/api/test-chat", async (req, res) => {
+    try {
+      const { GoogleGenAI, Type } = await import("@google/genai");
+      const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "No API key" });
+      
+      const ai = new GoogleGenAI({ apiKey });
+      
+      const controlSmartHomeFunction = {
+        name: "controlSmartHome",
+        description: "Control smart home devices like lights, TVs, thermostats, fans, and speakers.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            roomId: { type: Type.STRING },
+            deviceId: { type: Type.STRING },
+            action: { type: Type.STRING },
+            value: { type: Type.NUMBER }
+          },
+          required: ["roomId", "deviceId", "action"],
+        }
+      };
+
+      const chat = ai.chats.create({
+        model: "gemini-3-flash-preview",
+        config: {
+          systemInstruction: `You are AVA, an advanced smart home assistant for Havenly. User: User. Keep responses concise and helpful.`,
+          tools: [{ functionDeclarations: [controlSmartHomeFunction] }]
+        }
+      });
+
+      console.log("Sending message...");
+      let response = await chat.sendMessage({ message: "Turn on the living room lights" });
+      
+      let logs = [];
+      logs.push("Response text: " + response.text);
+      logs.push("Function calls: " + JSON.stringify(response.functionCalls));
+
+      if (response.functionCalls && response.functionCalls.length > 0) {
+        const functionResponses = response.functionCalls.map((fc: any) => ({
+          functionResponse: {
+            id: fc.id,
+            name: fc.name,
+            response: { result: "Executed on on living_room_lights" }
+          }
+        }));
+        
+        console.log("Sending function response...");
+        response = await chat.sendMessage({ message: functionResponses });
+        logs.push("Response text after function call: " + response.text);
+      }
+      res.json({ logs });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || String(e) });
+    }
   });
 
   // Vite middleware for development

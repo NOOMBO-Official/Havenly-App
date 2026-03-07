@@ -32,6 +32,8 @@ import GoogleCalendarWidget from "./GoogleCalendarWidget";
 import ClockWidget from "./ClockWidget";
 import ThreeDWidget from "./ThreeDWidget";
 import AiGeneratedWidget from "./AiGeneratedWidget";
+import NewsWidget from "./NewsWidget";
+import SystemStatsWidget from "./SystemStatsWidget";
 import { X, Plus } from 'lucide-react';
 
 const WIDGET_COMPONENTS: Record<string, React.FC<any>> = {
@@ -45,6 +47,8 @@ const WIDGET_COMPONENTS: Record<string, React.FC<any>> = {
   googleCalendar: GoogleCalendarWidget,
   clock: ClockWidget,
   threed: ThreeDWidget,
+  news: NewsWidget,
+  systemStats: SystemStatsWidget,
 };
 
 interface SortableWidgetProps {
@@ -192,7 +196,7 @@ export default function WidgetGrid() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
             {/* We can map the layout into a CSS grid. Some widgets span 8 cols, some 4. */}
             {activeLayout.map((item) => {
-              const isLarge = item.id === 'quickActions' || item.id === 'smartHome' || item.id === 'notion' || item.id === 'googleCalendar';
+              const isLarge = item.id === 'quickActions' || item.id === 'smartHome' || item.id === 'notion' || item.id === 'googleCalendar' || item.id === 'systemStats';
               return (
                 <div key={item.id} className={isLarge ? 'lg:col-span-8' : 'lg:col-span-4'}>
                   <SortableWidget 

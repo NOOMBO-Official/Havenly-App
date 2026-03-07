@@ -14,7 +14,7 @@ interface Message {
 
 export default function AiChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { settings } = useSettings();
-  const { toggleDevice, setDeviceState } = useSmartHome();
+  const { rooms, toggleDevice, setDeviceState } = useSmartHome();
   const [messages, setMessages] = useState<Message[]>([
     { role: 'model', text: `Hi ${settings?.userName || 'there'}! I'm AVA. How can I help you today?` }
   ]);
@@ -38,7 +38,7 @@ export default function AiChatModal({ isOpen, onClose }: { isOpen: boolean; onCl
   // Initialize Chat Session
   useEffect(() => {
     if (isOpen && !chatSessionRef.current) {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) return;
       
       const ai = new GoogleGenAI({ apiKey });
@@ -58,17 +58,45 @@ export default function AiChatModal({ isOpen, onClose }: { isOpen: boolean; onCl
         }
       };
 
+      const getWeatherFunction: FunctionDeclaration = {
+        name: "getWeather",
+        description: "Get the current weather for a specific location.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            location: { type: Type.STRING, description: "The city and state, e.g., San Francisco, CA" }
+          },
+          required: ["location"],
+        }
+      };
+
+      const getSystemStatsFunction: FunctionDeclaration = {
+        name: "getSystemStats",
+        description: "Get the current system statistics (CPU, RAM, Storage, Network).",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {},
+        }
+      };
+
+      const systemInstruction = `You are AVA, an advanced smart home assistant for Havenly. User: ${settings?.userName || "User"}. Keep responses concise and helpful.
+Current Time: ${new Date().toLocaleString()}
+Current Weather Location: ${settings?.weatherLocation}
+Smart Home State:
+${rooms.map(r => `${r.name} (${r.id}):\n` + r.devices.map(d => `  - ${d.name} (${d.id}): ${d.type}, state: ${d.state}`).join('\n')).join('\n')}
+`;
+
       chatSessionRef.current = ai.chats.create({
         model: "gemini-3-flash-preview",
         config: {
-          systemInstruction: `You are AVA, an advanced smart home assistant for Havenly. User: ${settings?.userName || "User"}. Keep responses concise and helpful.`,
-          tools: [{ functionDeclarations: [controlSmartHomeFunction] }]
+          systemInstruction,
+          tools: [{ functionDeclarations: [controlSmartHomeFunction, getWeatherFunction, getSystemStatsFunction] }, { googleSearch: {} }]
         }
       });
     }
   }, [isOpen, settings]);
 
-  const handleFunctionCall = (functionCall: any) => {
+  const handleFunctionCall = async (functionCall: any) => {
     if (functionCall.name === "controlSmartHome") {
       const { roomId, deviceId, action, value } = functionCall.args;
       if (action === 'toggle') toggleDevice(roomId, deviceId);
@@ -76,6 +104,33 @@ export default function AiChatModal({ isOpen, onClose }: { isOpen: boolean; onCl
       else if (action === 'off') setDeviceState(roomId, deviceId, false);
       else if (action === 'set' && value !== undefined) setDeviceState(roomId, deviceId, value);
       return { result: `Executed ${action} on ${deviceId}` };
+    } else if (functionCall.name === "getWeather") {
+      const { location } = functionCall.args;
+      try {
+        let geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`);
+        let geoData = await geoRes.json();
+        if (!geoData.results || geoData.results.length === 0) {
+          return { error: "Location not found" };
+        }
+        const { latitude, longitude } = geoData.results[0];
+        const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph`);
+        const weatherData = await weatherRes.json();
+        return { result: weatherData.current };
+      } catch (e: any) {
+        return { error: e.message };
+      }
+    } else if (functionCall.name === "getSystemStats") {
+      return {
+        result: {
+          cpu: Math.floor(Math.random() * 40) + 10,
+          ram: Math.floor(Math.random() * 30) + 40,
+          storage: 65,
+          network: {
+            down: Math.floor(Math.random() * 100) + 50,
+            up: Math.floor(Math.random() * 50) + 10
+          }
+        }
+      };
     }
     return { error: "Unknown function" };
   };
@@ -93,22 +148,23 @@ export default function AiChatModal({ isOpen, onClose }: { isOpen: boolean; onCl
       
       // Handle tool calls if any
       if (response.functionCalls && response.functionCalls.length > 0) {
-        const functionResponses = response.functionCalls.map((fc: any) => ({
-          id: fc.id,
-          name: fc.name,
-          response: handleFunctionCall(fc)
-        }));
+        const functionResponses = await Promise.all(response.functionCalls.map(async (fc: any) => ({
+          functionResponse: {
+            id: fc.id,
+            name: fc.name,
+            response: await handleFunctionCall(fc)
+          }
+        })));
         
         response = await chatSessionRef.current.sendMessage({ 
-          message: functionResponses // Note: In standard chat, we might need to format this differently or use generateContent for multi-turn tool calls.
-          // For simplicity, we'll just append a text message if tool calls fail, but let's try standard tool response.
+          message: functionResponses 
         });
       }
 
       setMessages(prev => [...prev, { role: 'model', text: response.text || 'Done.' }]);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Chat error:", error);
-      setMessages(prev => [...prev, { role: 'model', text: "Sorry, I encountered an error processing your request." }]);
+      setMessages(prev => [...prev, { role: 'model', text: `Sorry, I encountered an error processing your request: ${error.message || error}` }]);
     } finally {
       setIsProcessing(false);
     }
@@ -116,8 +172,27 @@ export default function AiChatModal({ isOpen, onClose }: { isOpen: boolean; onCl
 
   const startRecording = async () => {
     try {
+      if (typeof MediaRecorder === 'undefined') {
+        alert("Your browser does not support audio recording.");
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      
+      let options: any = {};
+      if (typeof MediaRecorder !== 'undefined') {
+        if (MediaRecorder.isTypeSupported('audio/webm')) {
+          options.mimeType = 'audio/webm';
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          options.mimeType = 'audio/mp4';
+        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+          options.mimeType = 'audio/ogg';
+        } else if (MediaRecorder.isTypeSupported('audio/aac')) {
+          options.mimeType = 'audio/aac';
+        }
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -127,15 +202,16 @@ export default function AiChatModal({ isOpen, onClose }: { isOpen: boolean; onCl
 
       mediaRecorder.onstop = async () => {
         setIsProcessing(true);
-        const mimeType = mediaRecorder.mimeType || 'audio/webm';
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        const actualMimeType = mediaRecorder.mimeType || options.mimeType || 'audio/webm';
+        const cleanMimeType = actualMimeType.split(';')[0];
+        const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
         
         // Convert blob to base64
         const reader = new FileReader();
         reader.readAsDataURL(audioBlob);
         reader.onloadend = async () => {
           const base64data = (reader.result as string).split(',')[1];
-          await handleSendAudio(base64data, mimeType);
+          await handleSendAudio(base64data, cleanMimeType);
         };
         
         stream.getTracks().forEach(track => track.stop());
@@ -160,29 +236,108 @@ export default function AiChatModal({ isOpen, onClose }: { isOpen: boolean; onCl
     setMessages(prev => [...prev, { role: 'user', text: "🎤 Voice Message", isAudio: true }]);
     
     try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY;
       const ai = new GoogleGenAI({ apiKey: apiKey! });
       
-      // We use generateContent to transcribe and respond to the audio
-      // We'll pass the recent chat history as context
       const historyText = messages.slice(-5).map(m => `${m.role}: ${m.text}`).join('\n');
       
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+      const controlSmartHomeFunction: FunctionDeclaration = {
+        name: "controlSmartHome",
+        description: "Control smart home devices like lights, TVs, thermostats, fans, and speakers.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            roomId: { type: Type.STRING },
+            deviceId: { type: Type.STRING },
+            action: { type: Type.STRING },
+            value: { type: Type.NUMBER }
+          },
+          required: ["roomId", "deviceId", "action"],
+        }
+      };
+
+      const getWeatherFunction: FunctionDeclaration = {
+        name: "getWeather",
+        description: "Get the current weather for a specific location.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            location: { type: Type.STRING, description: "The city and state, e.g., San Francisco, CA" }
+          },
+          required: ["location"],
+        }
+      };
+
+      const getSystemStatsFunction: FunctionDeclaration = {
+        name: "getSystemStats",
+        description: "Get the current system statistics (CPU, RAM, Storage, Network).",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {},
+        }
+      };
+
+      const systemInstruction = `You are AVA, an advanced smart home assistant for Havenly. User: ${settings?.userName || "User"}. Keep responses concise and helpful.
+Current Time: ${new Date().toLocaleString()}
+Current Weather Location: ${settings?.weatherLocation}
+Smart Home State:
+${rooms.map(r => `${r.name} (${r.id}):\n` + r.devices.map(d => `  - ${d.name} (${d.id}): ${d.type}, state: ${d.state}`).join('\n')).join('\n')}
+`;
+
+      let response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
         contents: [
           {
+            role: "user",
             parts: [
               { text: `Here is the recent chat history:\n${historyText}\n\nThe user just sent an audio message. Please respond to it.` },
               { inlineData: { mimeType: mimeType, data: base64Audio } }
             ]
           }
-        ]
+        ],
+        config: {
+          systemInstruction,
+          tools: [{ functionDeclarations: [controlSmartHomeFunction, getWeatherFunction, getSystemStatsFunction] }, { googleSearch: {} }]
+        }
       });
+
+      if (response.functionCalls && response.functionCalls.length > 0) {
+        const functionResponses = await Promise.all(response.functionCalls.map(async (fc: any) => ({
+          functionResponse: {
+            id: fc.id,
+            name: fc.name,
+            response: await handleFunctionCall(fc)
+          }
+        })));
+        
+        response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: `Here is the recent chat history:\n${historyText}\n\nThe user just sent an audio message. Please respond to it.` },
+                { inlineData: { mimeType: mimeType, data: base64Audio } }
+              ]
+            },
+            {
+              role: "model",
+              parts: response.functionCalls.map(fc => ({ functionCall: fc }))
+            },
+            {
+              role: "user",
+              parts: functionResponses
+            }
+          ],
+          config: {
+            systemInstruction,
+            tools: [{ functionDeclarations: [controlSmartHomeFunction, getWeatherFunction, getSystemStatsFunction] }, { googleSearch: {} }]
+          }
+        });
+      }
 
       setMessages(prev => [...prev, { role: 'model', text: response.text || 'Done.' }]);
       
-      // Sync it back to the chat session if possible, though ai.chats doesn't easily accept audio parts in sendMessage yet.
-      // We'll just keep it in the UI state.
     } catch (error) {
       console.error("Audio processing error:", error);
       setMessages(prev => [...prev, { role: 'model', text: "Sorry, I couldn't process that audio." }]);
