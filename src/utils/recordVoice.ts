@@ -1,31 +1,23 @@
-// Record audio and use SpeechRecognition in the browser
-export function startVoiceCommand(onResult: (text: string) => void) {
-  const SpeechRecognition =
-    (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+// Frontend-only offline speech recognition using Vosk WASM
+// Install vosk wasm in your project: npm install vosk-browser
+import { Model, Recognizer } from "vosk-browser";
 
-  if (!SpeechRecognition) {
-    alert("Your browser does not support Speech Recognition");
-    return;
-  }
+let model: Model;
 
-  const recognition = new SpeechRecognition();
-  recognition.lang = "en-US";
-  recognition.interimResults = false;
-  recognition.maxAlternatives = 1;
+export async function initVosk() {
+  model = new Model("/models/vosk-model-small-en-us-0.15"); // Place model in /public/models
+}
 
-  recognition.onresult = (event) => {
-    const text = event.results[0][0].transcript;
-    console.log("Recognized:", text);
-    onResult(text);
-  };
+export async function recognizeAudio(blob: Blob): Promise<string> {
+  if (!model) await initVosk();
 
-  recognition.onerror = (event) => {
-    console.error("Speech recognition error:", event.error);
-  };
+  const arrayBuffer = await blob.arrayBuffer();
+  const audioContext = new AudioContext();
+  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-  recognition.onend = () => {
-    console.log("Recognition ended");
-  };
+  const recognizer = new Recognizer(model, audioBuffer.sampleRate);
+  recognizer.acceptWaveform(audioBuffer.getChannelData(0));
+  const result = recognizer.finalResult();
 
-  recognition.start();
+  return result.text || "";
 }
