@@ -1,23 +1,16 @@
-// Frontend-only offline speech recognition using Vosk WASM
-// Install vosk wasm in your project: npm install vosk-browser
-import { Model, Recognizer } from "vosk-browser";
-
-let model: Model;
-
-export async function initVosk() {
-  model = new Model("/models/vosk-model-small-en-us-0.15"); // Place model in /public/models
-}
+// src/utils/recordVoice.ts
+let model: any;
 
 export async function recognizeAudio(blob: Blob): Promise<string> {
-  if (!model) await initVosk();
+  if (!model) {
+    // lazy-load in browser only
+    const { Vosk } = await import("vosk-browser");
+    model = new Vosk({
+      modelUrl: "/vosk-model-small-en-us-0.15", // make sure you copy this folder into `public/`
+    });
+    await model.init();
+  }
 
-  const arrayBuffer = await blob.arrayBuffer();
-  const audioContext = new AudioContext();
-  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-  const recognizer = new Recognizer(model, audioBuffer.sampleRate);
-  recognizer.acceptWaveform(audioBuffer.getChannelData(0));
-  const result = recognizer.finalResult();
-
-  return result.text || "";
+  const result = await model.recognize(blob);
+  return result.text;
 }
