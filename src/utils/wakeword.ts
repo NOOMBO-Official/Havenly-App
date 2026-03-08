@@ -1,4 +1,3 @@
-// Detect "Hey Ava" using Porcupine
 import { PorcupineWorker } from "@picovoice/porcupine-web";
 
 export async function initWakeWord(onWake: () => void) {
