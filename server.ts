@@ -1,9 +1,20 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { WebSocketServer, WebSocket } from "ws";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok" });
+  });
 
   const SPOTIFY_CLIENT_ID =
     process.env.SPOTIFY_CLIENT_ID || "124883cc46964016bb89cbd017f3ae14";
@@ -195,67 +206,111 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  app.get("/api/test-env", (req, res) => {
+  app.get("/api/test-env-2", (req, res) => {
     res.json({
-      gemini: process.env.GEMINI_API_KEY,
-      api: process.env.API_KEY
+      keys: Object.keys(process.env).filter(k => k.includes('API') || k.includes('KEY') || k.includes('GEMINI') || k.includes('GOOGLE')),
     });
   });
 
-  app.get("/api/test-chat", async (req, res) => {
+  // In-memory store for automations and sketches
+  let automations: any[] = [];
+  let sketches: any[] = [];
+  let events: any[] = [];
+  const connectedDevices = new Map<string, any>();
+
+  // Endpoint to trigger OTA update
+  app.post('/api/devices/:id/ota', express.json(), (req, res) => {
+    const deviceId = req.params.id;
+    const device = connectedDevices.get(deviceId);
+    
+    if (!device) {
+      return res.status(404).json({ error: 'Device not found or offline' });
+    }
+    
+    // Send OTA command to the actual device
+    device.ws.send(JSON.stringify({
+      type: 'start_ota',
+      firmwareUrl: req.body.firmwareUrl || 'http://example.com/firmware.bin'
+    }));
+    
+    res.json({ success: true, message: 'OTA command sent to device' });
+  });
+
+  app.get('/api/events', (req, res) => {
+    res.json(events);
+  });
+
+  app.post('/api/events', express.json(), (req, res) => {
+    const newEvent = { id: Date.now().toString(), ...req.body };
+    events.push(newEvent);
+    res.json(newEvent);
+  });
+
+  app.delete('/api/events/:id', (req, res) => {
+    events = events.filter(e => e.id !== req.params.id);
+    res.json({ success: true });
+  });
+
+  app.get('/api/automations', (req, res) => {
+    res.json(automations);
+  });
+
+  app.post('/api/automations', express.json(), (req, res) => {
+    const newAutomation = { id: Date.now().toString(), ...req.body };
+    automations.push(newAutomation);
+    res.json(newAutomation);
+  });
+
+  app.delete('/api/automations/:id', (req, res) => {
+    automations = automations.filter(a => a.id !== req.params.id);
+    res.json({ success: true });
+  });
+
+  app.put('/api/automations/:id', express.json(), (req, res) => {
+    automations = automations.map(a => a.id === req.params.id ? { ...a, ...req.body } : a);
+    res.json({ success: true });
+  });
+
+  app.get('/api/sketches', (req, res) => {
+    res.json(sketches);
+  });
+
+  app.post('/api/sketches', express.json(), (req, res) => {
+    const newSketch = { id: Date.now().toString(), ...req.body };
+    sketches.push(newSketch);
+    res.json(newSketch);
+  });
+
+  app.delete('/api/sketches/:id', (req, res) => {
+    sketches = sketches.filter(s => s.id !== req.params.id);
+    res.json({ success: true });
+  });
+
+  app.get("/api/weather/geocode", async (req, res) => {
     try {
-      const { GoogleGenAI, Type } = await import("@google/genai");
-      const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
-      if (!apiKey) return res.status(500).json({ error: "No API key" });
-      
-      const ai = new GoogleGenAI({ apiKey });
-      
-      const controlSmartHomeFunction = {
-        name: "controlSmartHome",
-        description: "Control smart home devices like lights, TVs, thermostats, fans, and speakers.",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            roomId: { type: Type.STRING },
-            deviceId: { type: Type.STRING },
-            action: { type: Type.STRING },
-            value: { type: Type.NUMBER }
-          },
-          required: ["roomId", "deviceId", "action"],
-        }
-      };
+      const { name } = req.query;
+      if (!name) return res.status(400).json({ error: "Name is required" });
+      const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name as string)}&count=1&language=en&format=json`);
+      if (!response.ok) throw new Error("Geocoding API failed");
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Geocoding proxy error:", error);
+      res.status(500).json({ error: "Failed to fetch geocoding data" });
+    }
+  });
 
-      const chat = ai.chats.create({
-        model: "gemini-3-flash-preview",
-        config: {
-          systemInstruction: `You are AVA, an advanced smart home assistant for Havenly. User: User. Keep responses concise and helpful.`,
-          tools: [{ functionDeclarations: [controlSmartHomeFunction] }]
-        }
-      });
-
-      console.log("Sending message...");
-      let response = await chat.sendMessage({ message: "Turn on the living room lights" });
-      
-      let logs = [];
-      logs.push("Response text: " + response.text);
-      logs.push("Function calls: " + JSON.stringify(response.functionCalls));
-
-      if (response.functionCalls && response.functionCalls.length > 0) {
-        const functionResponses = response.functionCalls.map((fc: any) => ({
-          functionResponse: {
-            id: fc.id,
-            name: fc.name,
-            response: { result: "Executed on on living_room_lights" }
-          }
-        }));
-        
-        console.log("Sending function response...");
-        response = await chat.sendMessage({ message: functionResponses });
-        logs.push("Response text after function call: " + response.text);
-      }
-      res.json({ logs });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message || String(e) });
+  app.get("/api/weather/forecast", async (req, res) => {
+    try {
+      const { latitude, longitude } = req.query;
+      if (!latitude || !longitude) return res.status(400).json({ error: "Latitude and longitude are required" });
+      const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph`);
+      if (!response.ok) throw new Error("Weather API failed");
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Weather proxy error:", error);
+      res.status(500).json({ error: "Failed to fetch weather data" });
     }
   });
 
@@ -267,12 +322,88 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static("dist"));
+    app.use(express.static("dist", { index: false }));
+    app.get("*", (req, res) => {
+      try {
+        let html = fs.readFileSync(path.join(__dirname, "dist", "index.html"), "utf-8");
+        res.send(html);
+      } catch (err) {
+        console.error("Error serving index.html:", err);
+        res.status(500).send("Internal Server Error");
+      }
+    });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+
+  // Setup WebSocket Server for Real Devices
+  const wss = new WebSocketServer({ server });
+
+  wss.on('connection', (ws: WebSocket) => {
+    let deviceId: string | null = null;
+
+    ws.on('message', (message: string) => {
+      try {
+        const data = JSON.parse(message);
+        
+        if (data.type === 'register') {
+          deviceId = data.id;
+          connectedDevices.set(deviceId!, {
+            id: data.id,
+            name: data.name || 'Unknown Device',
+            type: data.deviceType || 'Arduino',
+            status: 'online',
+            lastSeen: new Date().toISOString(),
+            ip: data.ip || 'Unknown IP',
+            board: data.board || 'Generic',
+            firmwareVersion: data.firmwareVersion || 'v1.0.0',
+            ws
+          });
+          broadcastDevices();
+        } else if (data.type === 'ota_progress') {
+          // Forward OTA progress to all clients
+          broadcastToClients({
+            type: 'ota_progress',
+            deviceId: data.deviceId,
+            progress: data.progress,
+            status: data.status,
+            log: data.log
+          });
+        }
+      } catch (e) {
+        console.error('WebSocket message error:', e);
+      }
+    });
+
+    ws.on('close', () => {
+      if (deviceId) {
+        connectedDevices.delete(deviceId);
+        broadcastDevices();
+      }
+    });
+  });
+
+  function broadcastDevices() {
+    const devicesList = Array.from(connectedDevices.values()).map(d => {
+      const { ws, ...deviceData } = d;
+      return deviceData;
+    });
+    
+    broadcastToClients({
+      type: 'devices_update',
+      devices: devicesList
+    });
+  }
+
+  function broadcastToClients(data: any) {
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(data));
+      }
+    });
+  }
 }
 
 startServer();

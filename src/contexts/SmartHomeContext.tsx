@@ -15,57 +15,33 @@ export interface Room {
   devices: Device[];
 }
 
-const initialRooms: Room[] = [
-  {
-    id: 'living_room',
-    name: 'Living Room',
-    devices: [
-      { id: 'lr_light_1', name: 'Main Lights', type: 'light', state: true },
-      { id: 'lr_tv', name: 'Samsung TV', type: 'tv', state: false },
-      { id: 'lr_thermostat', name: 'Nest', type: 'thermostat', state: 72 },
-      { id: 'lr_speaker', name: 'Sonos', type: 'speaker', state: true },
-    ]
-  },
-  {
-    id: 'bedroom',
-    name: 'Bedroom',
-    devices: [
-      { id: 'bed_light_1', name: 'Ceiling Light', type: 'light', state: false },
-      { id: 'bed_light_2', name: 'Lamp', type: 'light', state: true },
-      { id: 'bed_fan', name: 'Ceiling Fan', type: 'fan', state: false },
-    ]
-  },
-  {
-    id: 'kitchen',
-    name: 'Kitchen',
-    devices: [
-      { id: 'k_light_1', name: 'Island Lights', type: 'light', state: true },
-      { id: 'k_light_2', name: 'Under Cabinet', type: 'light', state: false },
-    ]
-  }
-];
-
 interface SmartHomeContextType {
   rooms: Room[];
   toggleDevice: (roomId: string, deviceId: string) => void;
   setDeviceState: (roomId: string, deviceId: string, state: any) => void;
+  addRoom: (name: string) => void;
+  addDevice: (roomId: string, device: Omit<Device, 'id'>) => void;
+  deleteDevice: (roomId: string, deviceId: string) => void;
 }
 
 const SmartHomeContext = createContext<SmartHomeContextType>({
-  rooms: initialRooms,
+  rooms: [],
   toggleDevice: () => {},
   setDeviceState: () => {},
+  addRoom: () => {},
+  addDevice: () => {},
+  deleteDevice: () => {},
 });
 
 export const SmartHomeProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
-  const [rooms, setRooms] = useState<Room[]>(initialRooms);
+  const [rooms, setRooms] = useState<Room[]>([]);
 
   useEffect(() => {
     if (user) {
       fetchDevices();
     } else {
-      setRooms(initialRooms);
+      setRooms([]);
     }
   }, [user]);
 
@@ -79,39 +55,93 @@ export const SmartHomeProvider = ({ children }: { children: ReactNode }) => {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        // Map database devices back to rooms structure
-        const updatedRooms = initialRooms.map(room => {
-          const roomDevices = data.filter(d => d.room_id === room.id);
-          return {
-            ...room,
-            devices: room.devices.map(device => {
-              const dbDevice = roomDevices.find(d => d.device_id === device.id);
-              return dbDevice ? { ...device, state: dbDevice.state } : device;
-            })
-          };
+        // Reconstruct rooms from devices
+        const roomsMap = new Map<string, Room>();
+        data.forEach(d => {
+          if (!roomsMap.has(d.room_id)) {
+            roomsMap.set(d.room_id, { id: d.room_id, name: d.room_name || d.room_id, devices: [] });
+          }
+          roomsMap.get(d.room_id)!.devices.push({
+            id: d.device_id,
+            name: d.name,
+            type: d.type,
+            state: d.state
+          });
         });
-        setRooms(updatedRooms);
+        setRooms(Array.from(roomsMap.values()));
       } else {
-        // Initialize devices for new user
-        const devicesToInsert = initialRooms.flatMap(room => 
-          room.devices.map(device => ({
-            user_id: user?.id,
-            room_id: room.id,
-            device_id: device.id,
-            name: device.name,
-            type: device.type,
-            state: device.state
-          }))
-        );
-
-        const { error: insertError } = await supabase
-          .from('devices')
-          .insert(devicesToInsert);
-
-        if (insertError) throw insertError;
+        setRooms([]);
       }
     } catch (error) {
       console.error('Error fetching devices:', error);
+    }
+  };
+
+  const addRoom = (name: string) => {
+    const newRoom: Room = {
+      id: name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(),
+      name,
+      devices: []
+    };
+    setRooms(prev => [...prev, newRoom]);
+  };
+
+  const addDevice = async (roomId: string, device: Omit<Device, 'id'>) => {
+    if (!user) return;
+    const newDevice: Device = {
+      ...device,
+      id: device.name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now()
+    };
+    
+    const room = rooms.find(r => r.id === roomId);
+    if (!room) return;
+
+    try {
+      const { error } = await supabase
+        .from('devices')
+        .insert({
+          user_id: user.id,
+          room_id: roomId,
+          room_name: room.name,
+          device_id: newDevice.id,
+          name: newDevice.name,
+          type: newDevice.type,
+          state: newDevice.state
+        });
+
+      if (error) throw error;
+
+      setRooms(prev => prev.map(r => {
+        if (r.id === roomId) {
+          return { ...r, devices: [...r.devices, newDevice] };
+        }
+        return r;
+      }));
+    } catch (error) {
+      console.error('Error adding device:', error);
+    }
+  };
+
+  const deleteDevice = async (roomId: string, deviceId: string) => {
+    if (!user) return;
+    try {
+      const { error } = await supabase
+        .from('devices')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('room_id', roomId)
+        .eq('device_id', deviceId);
+
+      if (error) throw error;
+
+      setRooms(prev => prev.map(r => {
+        if (r.id === roomId) {
+          return { ...r, devices: r.devices.filter(d => d.id !== deviceId) };
+        }
+        return r;
+      }));
+    } catch (error) {
+      console.error('Error deleting device:', error);
     }
   };
 
@@ -208,7 +238,7 @@ export const SmartHomeProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <SmartHomeContext.Provider value={{ rooms, toggleDevice, setDeviceState }}>
+    <SmartHomeContext.Provider value={{ rooms, toggleDevice, setDeviceState, addRoom, addDevice, deleteDevice }}>
       {children}
     </SmartHomeContext.Provider>
   );

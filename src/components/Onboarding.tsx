@@ -54,10 +54,10 @@ export default function Onboarding() {
                 <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-green-400 to-emerald-600 animate-pulse" />
               </div>
               <div className="space-y-4">
-                <h1 className="text-4xl md:text-5xl font-display font-medium tracking-tight">
+                <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">
                   Welcome to Havenly
                 </h1>
-                <p className="text-aura-muted text-lg">
+                <p className="text-aura-muted text-lg font-medium">
                   Your intelligent, connected home dashboard.
                 </p>
               </div>

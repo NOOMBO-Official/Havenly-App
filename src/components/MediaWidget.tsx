@@ -248,20 +248,20 @@ export default function MediaWidget() {
           <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent pointer-events-none" />
         )}
 
-        <div className="flex justify-between items-start relative z-10">
-          <div className="flex flex-col pr-4">
-            <span className="text-xs font-medium uppercase tracking-widest text-aura-muted mb-1 flex items-center gap-2">
+        <div className="flex justify-between items-start relative z-10 w-full gap-4">
+          <div className="flex flex-col flex-1 min-w-0">
+            <span className="text-xs font-medium uppercase tracking-widest text-aura-muted mb-1 flex items-center gap-2 shrink-0">
               <Music className="w-3 h-3 text-green-400" />
               {track ? "Now Playing" : "Spotify"}
             </span>
-            <span className="text-lg font-display font-medium text-aura-text line-clamp-1 mt-1">
+            <span className="text-lg md:text-xl font-display font-medium text-aura-text truncate w-full mt-1">
               {track ? track.name : "Not Playing"}
             </span>
-            <span className="text-sm text-aura-muted mt-1 line-clamp-1">
+            <span className="text-sm text-aura-muted mt-1 truncate w-full">
               {track ? track.artist : "Click to search & play"}
             </span>
           </div>
-          <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center overflow-hidden border border-aura-border shrink-0 shadow-lg group-hover:scale-105 transition-transform">
+          <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-green-500/10 flex items-center justify-center overflow-hidden border border-aura-border shrink-0 shadow-lg group-hover:scale-105 transition-transform">
             {track?.albumArt ? (
               <img
                 src={track.albumArt}
@@ -270,12 +270,12 @@ export default function MediaWidget() {
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <Music className="w-6 h-6 text-green-400 opacity-50" />
+              <Music className="w-8 h-8 text-green-400 opacity-50" />
             )}
           </div>
         </div>
 
-        <div className="mt-6 pt-6 border-t border-aura-border/50 relative z-10">
+        <div className="mt-auto pt-6 border-t border-aura-border/50 relative z-10 w-full">
           <div className="flex items-center justify-between mb-4">
             <span className="text-[10px] text-aura-muted font-mono">
               {track ? formatTime(track.progress) : "0:00"}

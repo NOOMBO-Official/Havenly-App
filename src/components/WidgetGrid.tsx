@@ -20,10 +20,12 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useSettings } from '../contexts/SettingsContext';
 import { useLongPress } from '../hooks/useLongPress';
+import { triggerHaptic } from '../utils/haptics';
 
 import QuickActions from "./QuickActions";
 import SmartHomeWidget from "./SmartHomeWidget";
 import WeatherWidget from "./WeatherWidget";
+import ThreeDWeatherWidget from "./ThreeDWeatherWidget";
 import MediaWidget from "./MediaWidget";
 import IntegrationsWidget from "./IntegrationsWidget";
 import CalendarWidget from "./CalendarWidget";
@@ -33,13 +35,27 @@ import ClockWidget from "./ClockWidget";
 import ThreeDWidget from "./ThreeDWidget";
 import AiGeneratedWidget from "./AiGeneratedWidget";
 import NewsWidget from "./NewsWidget";
-import SystemStatsWidget from "./SystemStatsWidget";
+import WebcamWidget from "./WebcamWidget";
+import NotesWidget from "./NotesWidget";
+import TimersWidget from "./TimersWidget";
+import IntelligentNow from "./IntelligentNow";
+import FinanceWidget from "./FinanceWidget";
+import NocdConnectWidget from "./NocdConnectWidget";
+import TodoWidget from "./TodoWidget";
+import FitnessWidget from "./FitnessWidget";
+import DevicesWidget from "./DevicesWidget";
+import ScreenTimeWidget from "./ScreenTimeWidget";
+import PhotosWidget from "./PhotosWidget";
+import MusicWidget from "./MusicWidget";
+import SmartStackWidget from "./SmartStackWidget";
+import ImagePlaygroundWidget from "./ImagePlaygroundWidget";
 import { X, Plus } from 'lucide-react';
 
 const WIDGET_COMPONENTS: Record<string, React.FC<any>> = {
   quickActions: QuickActions,
   smartHome: SmartHomeWidget,
   weather: WeatherWidget,
+  threedweather: ThreeDWeatherWidget,
   media: MediaWidget,
   integrations: IntegrationsWidget,
   calendar: CalendarWidget,
@@ -48,7 +64,20 @@ const WIDGET_COMPONENTS: Record<string, React.FC<any>> = {
   clock: ClockWidget,
   threed: ThreeDWidget,
   news: NewsWidget,
-  systemStats: SystemStatsWidget,
+  webcam: WebcamWidget,
+  notes: NotesWidget,
+  timers: TimersWidget,
+  intelligentNow: IntelligentNow,
+  finance: FinanceWidget,
+  nocdConnect: NocdConnectWidget,
+  todo: TodoWidget,
+  fitness: FitnessWidget,
+  devices: DevicesWidget,
+  screenTime: ScreenTimeWidget,
+  photos: PhotosWidget,
+  music: MusicWidget,
+  smartStack: SmartStackWidget,
+  imagePlayground: ImagePlaygroundWidget,
 };
 
 interface SortableWidgetProps {
@@ -80,8 +109,26 @@ function SortableWidget({ id, isEditMode, onRemove }: SortableWidgetProps) {
 
   if (!Component && !aiWidget) return null;
 
+  // Autopilot Mode Logic
+  const isAutopilotActive = settings.autopilotMode !== 'off';
+  let isRelevant = true;
+
+  if (isAutopilotActive) {
+    const productivityWidgets = ['todo', 'calendar', 'notes', 'notion', 'googleCalendar', 'clock', 'timers', 'intelligentNow'];
+    const relaxWidgets = ['media', 'music', 'photos', 'weather', 'threedweather', 'smartHome', 'news'];
+    const focusWidgets = ['todo', 'timers', 'clock'];
+
+    if (settings.autopilotMode === 'productivity') {
+      isRelevant = productivityWidgets.includes(id);
+    } else if (settings.autopilotMode === 'relax') {
+      isRelevant = relaxWidgets.includes(id);
+    } else if (settings.autopilotMode === 'focus') {
+      isRelevant = focusWidgets.includes(id);
+    }
+  }
+
   return (
-    <div ref={setNodeRef} style={style} className="relative group h-full">
+    <div ref={setNodeRef} style={style} className={`relative group h-full transition-all duration-700 ${isAutopilotActive && !isRelevant ? 'opacity-30 grayscale blur-[2px] scale-[0.98]' : 'opacity-100 grayscale-0 blur-0 scale-100'}`}>
       {isEditMode && (
         <div 
           className="absolute -top-3 -right-3 z-20 p-1.5 bg-red-500 text-white rounded-full cursor-pointer hover:bg-red-600 shadow-lg"
@@ -122,10 +169,12 @@ export default function WidgetGrid() {
   }, 5000); // 5 seconds
 
   const handleDragStart = (event: DragStartEvent) => {
+    triggerHaptic('medium');
     setActiveId(event.active.id as string);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
+    triggerHaptic('light');
     setActiveId(null);
     const { active, over } = event;
 
@@ -164,13 +213,13 @@ export default function WidgetGrid() {
   return (
     <div className="relative" {...longPressProps}>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-display font-medium text-aura-text">Dashboard</h2>
+        <h2 className="text-2xl font-medium tracking-tight text-white">Dashboard</h2>
         <button 
           onClick={() => setIsEditMode(!isEditMode)}
           className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
             isEditMode 
-              ? 'bg-blue-500 text-white hover:bg-blue-600' 
-              : 'bg-aura-card border border-aura-border text-aura-text hover:bg-aura-card-hover'
+              ? 'bg-blue-500 text-white hover:bg-blue-600 shadow-sm' 
+              : 'apple-glass-heavy text-white hover:bg-white/10 shadow-sm border border-white/10'
           }`}
         >
           {isEditMode ? 'Done Editing' : 'Edit Layout'}
@@ -196,7 +245,7 @@ export default function WidgetGrid() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
             {/* We can map the layout into a CSS grid. Some widgets span 8 cols, some 4. */}
             {activeLayout.map((item) => {
-              const isLarge = item.id === 'quickActions' || item.id === 'smartHome' || item.id === 'notion' || item.id === 'googleCalendar' || item.id === 'systemStats';
+              const isLarge = item.id === 'quickActions' || item.id === 'smartHome' || item.id === 'notion' || item.id === 'googleCalendar' || item.id === 'systemStats' || item.id === 'intelligentNow' || item.id === 'nocdConnect';
               return (
                 <div key={item.id} className={isLarge ? 'lg:col-span-8' : 'lg:col-span-4'}>
                   <SortableWidget 

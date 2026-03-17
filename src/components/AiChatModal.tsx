@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Mic, Square, Loader2, Bot, User } from 'lucide-react';
-import { GoogleGenAI, Type, FunctionDeclaration } from '@google/genai';
 import { useSettings } from '../contexts/SettingsContext';
 import { useSmartHome } from '../contexts/SmartHomeContext';
 import ReactMarkdown from 'react-markdown';
+import { GoogleGenAI } from '@google/genai';
 
 interface Message {
   role: 'user' | 'model';
@@ -22,9 +22,7 @@ export default function AiChatModal({ isOpen, onClose }: { isOpen: boolean; onCl
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const chatSessionRef = useRef<any>(null);
+  const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -35,133 +33,80 @@ export default function AiChatModal({ isOpen, onClose }: { isOpen: boolean; onCl
     scrollToBottom();
   }, [messages, isProcessing]);
 
-  // Initialize Chat Session
   useEffect(() => {
-    if (isOpen && !chatSessionRef.current) {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) return;
-      
-      const ai = new GoogleGenAI({ apiKey });
-      
-      const controlSmartHomeFunction: FunctionDeclaration = {
-        name: "controlSmartHome",
-        description: "Control smart home devices like lights, TVs, thermostats, fans, and speakers.",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            roomId: { type: Type.STRING },
-            deviceId: { type: Type.STRING },
-            action: { type: Type.STRING },
-            value: { type: Type.NUMBER }
-          },
-          required: ["roomId", "deviceId", "action"],
-        }
-      };
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = false;
+        
+        recognitionRef.current.onresult = async (event: any) => {
+          const text = event.results[0][0].transcript;
+          setIsRecording(false);
+          await handleSendText(text);
+        };
 
-      const getWeatherFunction: FunctionDeclaration = {
-        name: "getWeather",
-        description: "Get the current weather for a specific location.",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            location: { type: Type.STRING, description: "The city and state, e.g., San Francisco, CA" }
-          },
-          required: ["location"],
-        }
-      };
+        recognitionRef.current.onerror = (event: any) => {
+          console.error("Speech recognition error", event.error);
+          setIsRecording(false);
+        };
 
-      const getSystemStatsFunction: FunctionDeclaration = {
-        name: "getSystemStats",
-        description: "Get the current system statistics (CPU, RAM, Storage, Network).",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {},
-        }
-      };
-
-      const systemInstruction = `You are AVA, an advanced smart home assistant for Havenly. User: ${settings?.userName || "User"}. Keep responses concise and helpful.
-Current Time: ${new Date().toLocaleString()}
-Current Weather Location: ${settings?.weatherLocation}
-Smart Home State:
-${rooms.map(r => `${r.name} (${r.id}):\n` + r.devices.map(d => `  - ${d.name} (${d.id}): ${d.type}, state: ${d.state}`).join('\n')).join('\n')}
-`;
-
-      chatSessionRef.current = ai.chats.create({
-        model: "gemini-3-flash-preview",
-        config: {
-          systemInstruction,
-          tools: [{ functionDeclarations: [controlSmartHomeFunction, getWeatherFunction, getSystemStatsFunction] }, { googleSearch: {} }]
-        }
-      });
-    }
-  }, [isOpen, settings]);
-
-  const handleFunctionCall = async (functionCall: any) => {
-    if (functionCall.name === "controlSmartHome") {
-      const { roomId, deviceId, action, value } = functionCall.args;
-      if (action === 'toggle') toggleDevice(roomId, deviceId);
-      else if (action === 'on') setDeviceState(roomId, deviceId, true);
-      else if (action === 'off') setDeviceState(roomId, deviceId, false);
-      else if (action === 'set' && value !== undefined) setDeviceState(roomId, deviceId, value);
-      return { result: `Executed ${action} on ${deviceId}` };
-    } else if (functionCall.name === "getWeather") {
-      const { location } = functionCall.args;
-      try {
-        let geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`);
-        let geoData = await geoRes.json();
-        if (!geoData.results || geoData.results.length === 0) {
-          return { error: "Location not found" };
-        }
-        const { latitude, longitude } = geoData.results[0];
-        const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph`);
-        const weatherData = await weatherRes.json();
-        return { result: weatherData.current };
-      } catch (e: any) {
-        return { error: e.message };
+        recognitionRef.current.onend = () => {
+          setIsRecording(false);
+        };
       }
-    } else if (functionCall.name === "getSystemStats") {
-      return {
-        result: {
-          cpu: Math.floor(Math.random() * 40) + 10,
-          ram: Math.floor(Math.random() * 30) + 40,
-          storage: 65,
-          network: {
-            down: Math.floor(Math.random() * 100) + 50,
-            up: Math.floor(Math.random() * 50) + 10
-          }
-        }
-      };
     }
-    return { error: "Unknown function" };
-  };
+  }, [rooms, settings]);
 
-  const handleSendText = async () => {
-    if (!input.trim() || !chatSessionRef.current) return;
+  const handleSendText = async (textToSend?: string) => {
+    const userText = (textToSend || input).trim();
+    if (!userText) return;
     
-    const userText = input.trim();
-    setInput('');
+    if (!textToSend) setInput('');
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
     setIsProcessing(true);
 
-    try {
-      let response = await chatSessionRef.current.sendMessage({ message: userText });
-      
-      // Handle tool calls if any
-      if (response.functionCalls && response.functionCalls.length > 0) {
-        const functionResponses = await Promise.all(response.functionCalls.map(async (fc: any) => ({
-          functionResponse: {
-            id: fc.id,
-            name: fc.name,
-            response: await handleFunctionCall(fc)
+    // Simple local command parsing
+    const lowerText = userText.toLowerCase();
+    let commandExecuted = false;
+    if (lowerText.includes("turn on") || lowerText.includes("turn off") || lowerText.includes("toggle")) {
+      for (const room of rooms) {
+        for (const device of room.devices) {
+          if (lowerText.includes(device.name.toLowerCase()) || lowerText.includes(device.type.toLowerCase())) {
+            if (lowerText.includes("turn on")) setDeviceState(room.id, device.id, true);
+            else if (lowerText.includes("turn off")) setDeviceState(room.id, device.id, false);
+            else if (lowerText.includes("toggle")) toggleDevice(room.id, device.id);
+            commandExecuted = true;
           }
-        })));
-        
-        response = await chatSessionRef.current.sendMessage({ 
-          message: functionResponses 
-        });
+        }
       }
+    }
 
-      setMessages(prev => [...prev, { role: 'model', text: response.text || 'Done.' }]);
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Gemini API Key is missing.");
+      }
+      
+      const ai = new GoogleGenAI({ apiKey });
+      
+      const contents = messages.map(m => ({
+        role: m.role,
+        parts: [{ text: m.text }]
+      }));
+      contents.push({ role: 'user', parts: [{ text: userText }] });
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: contents,
+        config: {
+          systemInstruction: `You are AVA, an advanced smart home assistant for Havenly. User: ${settings?.userName || "User"}. Keep responses concise and helpful. ${commandExecuted ? "Acknowledge that you executed the user's smart home command." : ""}`,
+        }
+      });
+      
+      const reply = response.text;
+      setMessages(prev => [...prev, { role: 'model', text: reply || 'Done.' }]);
     } catch (error: any) {
       console.error("Chat error:", error);
       setMessages(prev => [...prev, { role: 'model', text: `Sorry, I encountered an error processing your request: ${error.message || error}` }]);
@@ -170,179 +115,24 @@ ${rooms.map(r => `${r.name} (${r.id}):\n` + r.devices.map(d => `  - ${d.name} ($
     }
   };
 
-  const startRecording = async () => {
-    try {
-      if (typeof MediaRecorder === 'undefined') {
-        alert("Your browser does not support audio recording.");
-        return;
+  const startRecording = () => {
+    if (recognitionRef.current) {
+      try {
+        setIsRecording(true);
+        recognitionRef.current.start();
+      } catch (err) {
+        console.error(err);
+        setIsRecording(false);
       }
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      let options: any = {};
-      if (typeof MediaRecorder !== 'undefined') {
-        if (MediaRecorder.isTypeSupported('audio/webm')) {
-          options.mimeType = 'audio/webm';
-        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-          options.mimeType = 'audio/mp4';
-        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
-          options.mimeType = 'audio/ogg';
-        } else if (MediaRecorder.isTypeSupported('audio/aac')) {
-          options.mimeType = 'audio/aac';
-        }
-      }
-
-      const mediaRecorder = new MediaRecorder(stream, options);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        setIsProcessing(true);
-        const actualMimeType = mediaRecorder.mimeType || options.mimeType || 'audio/webm';
-        const cleanMimeType = actualMimeType.split(';')[0];
-        const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
-        
-        // Convert blob to base64
-        const reader = new FileReader();
-        reader.readAsDataURL(audioBlob);
-        reader.onloadend = async () => {
-          const base64data = (reader.result as string).split(',')[1];
-          await handleSendAudio(base64data, cleanMimeType);
-        };
-        
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (err) {
-      console.error("Microphone error:", err);
-      alert("Microphone access is required for voice chat.");
+    } else {
+      alert("Speech recognition not supported in this browser.");
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
+    if (recognitionRef.current && isRecording) {
+      recognitionRef.current.stop();
       setIsRecording(false);
-    }
-  };
-
-  const handleSendAudio = async (base64Audio: string, mimeType: string) => {
-    setMessages(prev => [...prev, { role: 'user', text: "🎤 Voice Message", isAudio: true }]);
-    
-    try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      const ai = new GoogleGenAI({ apiKey: apiKey! });
-      
-      const historyText = messages.slice(-5).map(m => `${m.role}: ${m.text}`).join('\n');
-      
-      const controlSmartHomeFunction: FunctionDeclaration = {
-        name: "controlSmartHome",
-        description: "Control smart home devices like lights, TVs, thermostats, fans, and speakers.",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            roomId: { type: Type.STRING },
-            deviceId: { type: Type.STRING },
-            action: { type: Type.STRING },
-            value: { type: Type.NUMBER }
-          },
-          required: ["roomId", "deviceId", "action"],
-        }
-      };
-
-      const getWeatherFunction: FunctionDeclaration = {
-        name: "getWeather",
-        description: "Get the current weather for a specific location.",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            location: { type: Type.STRING, description: "The city and state, e.g., San Francisco, CA" }
-          },
-          required: ["location"],
-        }
-      };
-
-      const getSystemStatsFunction: FunctionDeclaration = {
-        name: "getSystemStats",
-        description: "Get the current system statistics (CPU, RAM, Storage, Network).",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {},
-        }
-      };
-
-      const systemInstruction = `You are AVA, an advanced smart home assistant for Havenly. User: ${settings?.userName || "User"}. Keep responses concise and helpful.
-Current Time: ${new Date().toLocaleString()}
-Current Weather Location: ${settings?.weatherLocation}
-Smart Home State:
-${rooms.map(r => `${r.name} (${r.id}):\n` + r.devices.map(d => `  - ${d.name} (${d.id}): ${d.type}, state: ${d.state}`).join('\n')).join('\n')}
-`;
-
-      let response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: `Here is the recent chat history:\n${historyText}\n\nThe user just sent an audio message. Please respond to it.` },
-              { inlineData: { mimeType: mimeType, data: base64Audio } }
-            ]
-          }
-        ],
-        config: {
-          systemInstruction,
-          tools: [{ functionDeclarations: [controlSmartHomeFunction, getWeatherFunction, getSystemStatsFunction] }, { googleSearch: {} }]
-        }
-      });
-
-      if (response.functionCalls && response.functionCalls.length > 0) {
-        const functionResponses = await Promise.all(response.functionCalls.map(async (fc: any) => ({
-          functionResponse: {
-            id: fc.id,
-            name: fc.name,
-            response: await handleFunctionCall(fc)
-          }
-        })));
-        
-        response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: [
-            {
-              role: "user",
-              parts: [
-                { text: `Here is the recent chat history:\n${historyText}\n\nThe user just sent an audio message. Please respond to it.` },
-                { inlineData: { mimeType: mimeType, data: base64Audio } }
-              ]
-            },
-            {
-              role: "model",
-              parts: response.functionCalls.map(fc => ({ functionCall: fc }))
-            },
-            {
-              role: "user",
-              parts: functionResponses
-            }
-          ],
-          config: {
-            systemInstruction,
-            tools: [{ functionDeclarations: [controlSmartHomeFunction, getWeatherFunction, getSystemStatsFunction] }, { googleSearch: {} }]
-          }
-        });
-      }
-
-      setMessages(prev => [...prev, { role: 'model', text: response.text || 'Done.' }]);
-      
-    } catch (error) {
-      console.error("Audio processing error:", error);
-      setMessages(prev => [...prev, { role: 'model', text: "Sorry, I couldn't process that audio." }]);
-    } finally {
-      setIsProcessing(false);
     }
   };
 
@@ -353,15 +143,23 @@ ${rooms.map(r => `${r.name} (${r.id}):\n` + r.devices.map(d => `  - ${d.name} ($
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 20, scale: 0.95 }}
-          className="fixed inset-4 md:inset-auto md:bottom-24 md:right-8 md:w-[400px] md:h-[600px] bg-black/80 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl z-50 flex flex-col overflow-hidden"
+          className={`fixed inset-0 md:top-auto md:left-auto md:bottom-24 md:right-8 md:w-[400px] md:h-[600px] apple-glass-heavy rounded-none md:rounded-[32px] shadow-2xl z-[115] flex flex-col overflow-hidden border-0 md:border transition-all duration-500 ${isProcessing ? 'border-transparent' : 'border-white/10'} pb-24 md:pb-0`}
         >
+          {/* Apple Intelligence Glow Border */}
+          {isProcessing && (
+            <div className="absolute inset-0 z-[-1] rounded-[32px] p-[2px] bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 animate-pulse" style={{ mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)', maskComposite: 'exclude', WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)', WebkitMaskComposite: 'xor' }}></div>
+          )}
+
+          {/* Ambient Background Orb */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 rounded-full blur-3xl pointer-events-none z-[-1] animate-pulse" />
+
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-white/10 bg-white/5">
+          <div className="flex items-center justify-between p-5 border-b border-white/10 bg-white/5 backdrop-blur-md">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center shadow-inner">
                 <Bot className="w-4 h-4 text-white" />
               </div>
-              <span className="font-medium text-white">AVA Chat</span>
+              <span className="font-semibold text-white tracking-tight">AVA Chat</span>
             </div>
             <button onClick={onClose} className="p-2 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-colors">
               <X className="w-5 h-5" />
@@ -369,7 +167,7 @@ ${rooms.map(r => `${r.name} (${r.id}):\n` + r.devices.map(d => `  - ${d.name} ($
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
             {messages.map((msg, idx) => (
               <motion.div
                 key={idx}
@@ -377,16 +175,16 @@ ${rooms.map(r => `${r.name} (${r.id}):\n` + r.devices.map(d => `  - ${d.name} ($
                 animate={{ opacity: 1, y: 0 }}
                 className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
               >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-white/10' : 'bg-gradient-to-tr from-blue-500 to-purple-500'}`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-white/10' : 'bg-gradient-to-tr from-blue-500 to-purple-500'}`}>
                   {msg.role === 'user' ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-white" />}
                 </div>
-                <div className={`max-w-[80%] rounded-2xl px-4 py-2 ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white/10 text-white/90'}`}>
+                <div className={`max-w-[80%] rounded-2xl px-4 py-3 shadow-sm ${msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-white/10 text-white border border-white/5'}`}>
                   {msg.isAudio ? (
                     <div className="flex items-center gap-2 font-medium">
                       <Mic className="w-4 h-4" /> Voice Message
                     </div>
                   ) : (
-                    <div className="prose prose-invert prose-sm max-w-none">
+                    <div className="prose prose-sm max-w-none prose-invert">
                       <ReactMarkdown>{msg.text}</ReactMarkdown>
                     </div>
                   )}
@@ -395,12 +193,12 @@ ${rooms.map(r => `${r.name} (${r.id}):\n` + r.devices.map(d => `  - ${d.name} ($
             ))}
             {isProcessing && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center shrink-0 shadow-sm">
                   <Bot className="w-4 h-4 text-white" />
                 </div>
-                <div className="bg-white/10 rounded-2xl px-4 py-3 flex items-center gap-2">
+                <div className="bg-white/10 rounded-2xl px-4 py-3 flex items-center gap-2 shadow-sm border border-white/5">
                   <Loader2 className="w-4 h-4 text-white/50 animate-spin" />
-                  <span className="text-white/50 text-sm">AVA is thinking...</span>
+                  <span className="text-white/50 text-sm font-medium">AVA is thinking...</span>
                 </div>
               </motion.div>
             )}
@@ -408,9 +206,9 @@ ${rooms.map(r => `${r.name} (${r.id}):\n` + r.devices.map(d => `  - ${d.name} ($
           </div>
 
           {/* Input Area */}
-          <div className="p-4 border-t border-white/10 bg-black/40">
+          <div className="p-5 border-t border-white/10 bg-black/20 backdrop-blur-md">
             <div className="flex items-end gap-2">
-              <div className="flex-1 bg-white/5 border border-white/10 rounded-2xl overflow-hidden focus-within:border-white/30 transition-colors">
+              <div className="flex-1 bg-white/5 border border-white/10 rounded-2xl overflow-hidden focus-within:border-white/30 transition-colors shadow-inner">
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -421,16 +219,16 @@ ${rooms.map(r => `${r.name} (${r.id}):\n` + r.devices.map(d => `  - ${d.name} ($
                     }
                   }}
                   placeholder="Message AVA..."
-                  className="w-full bg-transparent text-white px-4 py-3 max-h-32 min-h-[44px] resize-none focus:outline-none"
+                  className="w-full bg-transparent text-white px-4 py-3 max-h-32 min-h-[44px] resize-none focus:outline-none placeholder:text-white/30"
                   rows={1}
                 />
               </div>
               
               {input.trim() ? (
                 <button
-                  onClick={handleSendText}
+                  onClick={() => handleSendText()}
                   disabled={isProcessing}
-                  className="p-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl transition-colors shrink-0"
+                  className="p-3 bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white rounded-xl transition-colors shrink-0 shadow-sm"
                 >
                   <Send className="w-5 h-5" />
                 </button>
@@ -442,16 +240,34 @@ ${rooms.map(r => `${r.name} (${r.id}):\n` + r.devices.map(d => `  - ${d.name} ($
                   onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
                   onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
                   disabled={isProcessing}
-                  className={`p-3 rounded-xl transition-all shrink-0 ${isRecording ? 'bg-red-500 scale-110 shadow-[0_0_20px_rgba(239,68,68,0.5)]' : 'bg-white/10 hover:bg-white/20 text-white'}`}
+                  className={`p-3 rounded-xl transition-all shrink-0 shadow-sm ${isRecording ? 'bg-red-500 scale-110 shadow-[0_0_20px_rgba(239,68,68,0.5)] text-white' : 'bg-white/10 text-white hover:bg-white/20 border border-white/5'}`}
                 >
                   {isRecording ? <Square className="w-5 h-5 fill-current" /> : <Mic className="w-5 h-5" />}
                 </button>
               )}
             </div>
-            <div className="text-center mt-2">
-              <span className="text-[10px] text-white/30 uppercase tracking-wider font-medium">
-                {isRecording ? 'Release to send' : 'Hold mic to speak'}
-              </span>
+            <div className="text-center mt-3 h-4 flex items-center justify-center">
+              {isRecording ? (
+                <div className="flex items-center gap-1 h-full">
+                  {[...Array(5)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      className="w-1 bg-red-500 rounded-full"
+                      animate={{ height: ['20%', '100%', '20%'] }}
+                      transition={{
+                        duration: 0.5,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                        delay: i * 0.1
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <span className="text-[10px] text-white/50 uppercase tracking-widest font-semibold">
+                  Hold mic to speak
+                </span>
+              )}
             </div>
           </div>
         </motion.div>

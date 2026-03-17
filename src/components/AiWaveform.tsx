@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useAi } from '../contexts/AiContext';
 import gsap from 'gsap';
+import { motion, AnimatePresence } from 'motion/react';
 
 export default function AiWaveform() {
   const { status } = useAi();
@@ -109,16 +110,45 @@ export default function AiWaveform() {
     };
   }, [status]);
 
+  const isAiActive = status === 'listening' || status === 'speaking' || status === 'connecting';
+
   return (
-    <div 
-      ref={containerRef}
-      className="fixed bottom-0 left-0 w-full h-[150px] pointer-events-none z-[100] translate-y-full opacity-0"
-    >
-      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
-      <canvas 
-        ref={canvasRef}
-        className="absolute inset-0 w-full h-full"
-      />
-    </div>
+    <>
+      {/* Apple Intelligence Screen Edge Glow */}
+      <AnimatePresence>
+        {isAiActive && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1, ease: "easeInOut" }}
+            className="fixed inset-0 pointer-events-none z-[140] overflow-hidden"
+          >
+            <div className="absolute inset-0 border-[8px] border-transparent rounded-[48px]" style={{
+              boxShadow: 'inset 0 0 100px rgba(168, 85, 247, 0.3), inset 0 0 40px rgba(59, 130, 246, 0.4)',
+              animation: 'pulseGlow 4s infinite alternate ease-in-out'
+            }} />
+            <style>{`
+              @keyframes pulseGlow {
+                0% { box-shadow: inset 0 0 80px rgba(168, 85, 247, 0.2), inset 0 0 30px rgba(59, 130, 246, 0.3); }
+                50% { box-shadow: inset 0 0 120px rgba(236, 72, 153, 0.4), inset 0 0 60px rgba(168, 85, 247, 0.5); }
+                100% { box-shadow: inset 0 0 100px rgba(59, 130, 246, 0.3), inset 0 0 40px rgba(14, 165, 233, 0.4); }
+              }
+            `}</style>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div 
+        ref={containerRef}
+        className="fixed bottom-0 left-0 w-full h-[150px] pointer-events-none z-[150] translate-y-full opacity-0"
+      >
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+        <canvas 
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full"
+        />
+      </div>
+    </>
   );
 }

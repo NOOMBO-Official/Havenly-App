@@ -1,12 +1,14 @@
 import { useCallback, useRef, useState } from 'react';
+import { triggerHaptic } from '../utils/haptics';
 
 export const useLongPress = (onLongPress: () => void, ms: number = 5000) => {
   const [isPressed, setIsPressed] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout>();
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const start = useCallback(() => {
     setIsPressed(true);
     timerRef.current = setTimeout(() => {
+      triggerHaptic('heavy');
       onLongPress();
       setIsPressed(false);
     }, ms);

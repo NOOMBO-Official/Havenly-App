@@ -113,41 +113,41 @@ export default function ControlCenter() {
           
           <div
             ref={modalRef}
-            className="relative w-[90vw] max-w-md bg-aura-card/90 backdrop-blur-3xl border border-white/10 rounded-[3rem] p-8 shadow-[0_0_50px_rgba(0,0,0,0.5)] transform-style-3d"
+            className="relative w-[90vw] max-w-sm apple-glass-heavy rounded-[40px] p-6 shadow-2xl transform-style-3d"
           >
             {/* Header */}
-            <div className="flex justify-between items-center mb-8 px-2">
-              <h2 className="text-2xl font-display font-medium text-aura-text tracking-tight">
+            <div className="flex justify-between items-center mb-6 px-2">
+              <h2 className="text-xl font-semibold text-aura-text tracking-tight">
                 Control Center
               </h2>
               <button
                 onClick={closeControlCenter}
-                className="p-2 bg-white/5 rounded-full text-aura-muted hover:text-white hover:bg-white/10 transition-all"
+                className="p-1.5 apple-btn rounded-full text-aura-muted hover:text-white transition-all"
               >
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Toggles Grid */}
-            <div className="grid grid-cols-2 gap-4 mb-8">
+            <div className="grid grid-cols-2 gap-4 mb-4">
               {/* Connectivity Block */}
-              <div className="bg-black/20 rounded-[2rem] p-5 space-y-5 border border-white/5 shadow-inner">
+              <div className="apple-btn rounded-[28px] p-4 space-y-4 shadow-inner flex flex-col justify-between">
                 <motion.button
                   whileTap={{ scale: 0.95 }}
                   onClick={() => handleToggle("wifi")}
-                  className="flex items-center space-x-4 w-full group"
+                  className="flex items-center space-x-3 w-full group"
                 >
                   <motion.div
                     layout
-                    className={`p-3 rounded-full transition-all duration-300 ${toggles.wifi ? "bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]" : "bg-white/5 text-aura-muted"}`}
+                    className={`p-2.5 rounded-full transition-all duration-300 ${toggles.wifi ? "bg-blue-500 text-white" : "bg-black/20 text-aura-muted"}`}
                   >
                     <Wifi className="w-5 h-5" />
                   </motion.div>
-                  <div className="text-left">
-                    <div className="text-sm font-medium text-aura-text">
+                  <div className="text-left flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-aura-text truncate">
                       Wi-Fi
                     </div>
-                    <motion.div layout className="text-xs text-aura-muted">
+                    <motion.div layout className="text-[10px] text-aura-muted truncate">
                       {toggles.wifi ? "Havenly_Net" : "Off"}
                     </motion.div>
                   </div>
@@ -155,19 +155,19 @@ export default function ControlCenter() {
                 <motion.button
                   whileTap={{ scale: 0.95 }}
                   onClick={() => handleToggle("bluetooth")}
-                  className="flex items-center space-x-4 w-full group"
+                  className="flex items-center space-x-3 w-full group"
                 >
                   <motion.div
                     layout
-                    className={`p-3 rounded-full transition-all duration-300 ${toggles.bluetooth ? "bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]" : "bg-white/5 text-aura-muted"}`}
+                    className={`p-2.5 rounded-full transition-all duration-300 ${toggles.bluetooth ? "bg-blue-500 text-white" : "bg-black/20 text-aura-muted"}`}
                   >
                     <Bluetooth className="w-5 h-5" />
                   </motion.div>
-                  <div className="text-left">
-                    <div className="text-sm font-medium text-aura-text">
+                  <div className="text-left flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-aura-text truncate">
                       Bluetooth
                     </div>
-                    <motion.div layout className="text-xs text-aura-muted">
+                    <motion.div layout className="text-[10px] text-aura-muted truncate">
                       {toggles.bluetooth ? "On" : "Off"}
                     </motion.div>
                   </div>
@@ -178,67 +178,75 @@ export default function ControlCenter() {
               <div className="grid grid-cols-1 gap-4">
                 <motion.button
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => handleToggle("dnd")}
-                  className={`flex flex-col items-center justify-center space-y-3 p-4 rounded-[2rem] border transition-all duration-300 h-full ${
-                    toggles.dnd
-                      ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/50 shadow-[0_0_20px_rgba(99,102,241,0.2)]"
-                      : "bg-black/20 text-aura-text border-white/5 hover:bg-white/5"
+                  onClick={() => {
+                    const modes: ('off' | 'productivity' | 'relax' | 'focus')[] = ['off', 'productivity', 'relax', 'focus'];
+                    const currentIndex = modes.indexOf(settings.autopilotMode);
+                    const nextMode = modes[(currentIndex + 1) % modes.length];
+                    updateSettings({ autopilotMode: nextMode });
+                  }}
+                  className={`flex flex-col items-center justify-center space-y-2 p-4 rounded-[28px] transition-all duration-300 h-full ${
+                    settings.autopilotMode !== 'off'
+                      ? "bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.4)]"
+                      : "apple-btn text-aura-text"
                   }`}
                 >
                   <motion.div
-                    animate={{ rotate: toggles.dnd ? 360 : 0 }}
+                    animate={{ rotate: settings.autopilotMode !== 'off' ? 360 : 0 }}
                     transition={{ duration: 0.5, type: "spring" }}
                   >
                     <Moon
-                      className="w-8 h-8"
-                      fill={toggles.dnd ? "currentColor" : "none"}
+                      className="w-7 h-7"
+                      fill={settings.autopilotMode !== 'off' ? "currentColor" : "none"}
                     />
                   </motion.div>
-                  <span className="text-sm font-medium">Do Not Disturb</span>
+                  <div className="flex flex-col items-center">
+                    <span className="text-xs font-semibold">Focus Mode</span>
+                    <span className="text-[10px] opacity-80 capitalize">{settings.autopilotMode}</span>
+                  </div>
                 </motion.button>
               </div>
             </div>
 
             {/* Sliders */}
-            <div className="space-y-6 mb-8">
+            <div className="space-y-4 mb-4">
               {/* Brightness */}
-              <div className="bg-black/20 rounded-full p-4 flex items-center space-x-4 border border-white/5 shadow-inner">
-                <Sun className="w-5 h-5 text-aura-muted shrink-0 ml-2" />
+              <div className="apple-btn rounded-3xl p-3 flex items-center space-x-4 shadow-inner">
+                <Sun className="w-5 h-5 text-aura-text shrink-0 ml-2" />
                 <input
                   type="range"
                   min="0"
                   max="100"
                   value={brightness}
                   onChange={(e) => setBrightness(Number(e.target.value))}
-                  className="w-full h-2 bg-white/10 rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(255,255,255,0.5)] cursor-pointer"
+                  className="w-full h-6 bg-black/20 rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md cursor-pointer"
                   style={{
-                    background: `linear-gradient(to right, white ${brightness}%, rgba(255,255,255,0.1) ${brightness}%)`,
+                    background: `linear-gradient(to right, white ${brightness}%, rgba(0,0,0,0.2) ${brightness}%)`,
                   }}
                 />
               </div>
 
               {/* Volume */}
-              <div className="bg-black/20 rounded-full p-4 flex items-center space-x-4 border border-white/5 shadow-inner">
-                <Volume2 className="w-5 h-5 text-aura-muted shrink-0 ml-2" />
+              <div className="apple-btn rounded-3xl p-3 flex items-center space-x-4 shadow-inner">
+                <Volume2 className="w-5 h-5 text-aura-text shrink-0 ml-2" />
                 <input
                   type="range"
                   min="0"
                   max="100"
                   value={volume}
                   onChange={(e) => setVolume(Number(e.target.value))}
-                  className="w-full h-2 bg-white/10 rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(255,255,255,0.5)] cursor-pointer"
+                  className="w-full h-6 bg-black/20 rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md cursor-pointer"
                   style={{
-                    background: `linear-gradient(to right, white ${volume}%, rgba(255,255,255,0.1) ${volume}%)`,
+                    background: `linear-gradient(to right, white ${volume}%, rgba(0,0,0,0.2) ${volume}%)`,
                   }}
                 />
               </div>
             </div>
 
             {/* Bottom Row */}
-            <div className="flex justify-between items-center px-4 bg-black/20 rounded-[2rem] p-4 border border-white/5">
+            <div className="flex justify-between items-center px-4 apple-btn rounded-[28px] p-4">
               <div className="flex items-center space-x-3 text-aura-text">
                 <Battery className="w-6 h-6 text-emerald-400" />
-                <span className="text-base font-medium">85%</span>
+                <span className="text-sm font-semibold">85%</span>
               </div>
               <div className="flex space-x-2">
                 <motion.button
@@ -248,7 +256,7 @@ export default function ControlCenter() {
                       theme: settings.theme === "dark" ? "light" : "dark",
                     })
                   }
-                  className="p-3 bg-white/5 rounded-full text-aura-text hover:bg-white/10 transition-colors border border-white/5"
+                  className="p-2.5 bg-black/20 rounded-full text-aura-text hover:bg-black/40 transition-colors"
                 >
                   <motion.div
                     initial={false}

@@ -3,7 +3,7 @@ import { Wifi, WifiOff, Activity, Cpu } from "lucide-react";
 
 export default function SystemStatus() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [ping, setPing] = useState(12);
+  const [ping, setPing] = useState(0);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -11,9 +11,19 @@ export default function SystemStatus() {
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
-    const interval = setInterval(() => {
-      setPing(Math.floor(Math.random() * 10) + 10); // Mock ping 10-20ms
-    }, 5000);
+    const checkPing = async () => {
+      try {
+        const start = performance.now();
+        await fetch('/api/health');
+        const end = performance.now();
+        setPing(Math.round(end - start));
+      } catch (e) {
+        setPing(0);
+      }
+    };
+
+    checkPing();
+    const interval = setInterval(checkPing, 10000);
 
     return () => {
       window.removeEventListener("online", handleOnline);
@@ -23,7 +33,7 @@ export default function SystemStatus() {
   }, []);
 
   return (
-    <footer className="pt-12 border-t border-aura-border flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-aura-muted uppercase tracking-widest font-mono">
+    <footer className="pt-12 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-white/50 uppercase tracking-widest font-medium">
       <div className="flex items-center space-x-6">
         <span>Havenly OS v1.1.0</span>
         <div className="flex items-center space-x-2">

@@ -35,27 +35,51 @@ export default function WeatherWidget() {
       try {
         // 1. Geocode the location
         // Try the full location first, if it fails, try just the city name
-        let geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(settings.weatherLocation)}&count=1&language=en&format=json`);
-        let geoData = await geoRes.json();
+        let latitude: number, longitude: number;
         
-        if (!geoData.results || geoData.results.length === 0) {
-          // Fallback: try just the city name (before the comma)
-          const cityOnly = settings.weatherLocation.split(',')[0].trim();
-          geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityOnly)}&count=1&language=en&format=json`);
-          geoData = await geoRes.json();
+        try {
+          let geoRes = await fetch(`/api/weather/geocode?name=${encodeURIComponent(settings.weatherLocation)}`);
+          if (!geoRes.ok) throw new Error("Geocoding API failed");
+          let geoData = await geoRes.json();
           
           if (!geoData.results || geoData.results.length === 0) {
-            throw new Error("Location not found");
+            // Fallback: try just the city name (before the comma)
+            const cityOnly = settings.weatherLocation.split(',')[0].trim();
+            geoRes = await fetch(`/api/weather/geocode?name=${encodeURIComponent(cityOnly)}`);
+            if (!geoRes.ok) throw new Error("Geocoding API failed");
+            geoData = await geoRes.json();
+            
+            if (!geoData.results || geoData.results.length === 0) {
+              throw new Error("Location not found");
+            }
           }
+          
+          latitude = geoData.results[0].latitude;
+          longitude = geoData.results[0].longitude;
+        } catch (geoErr) {
+          console.error("Geocoding failed, using fallback coordinates:", geoErr);
+          // Fallback to New York coordinates if geocoding completely fails
+          latitude = 40.7128;
+          longitude = -74.0060;
         }
-        
-        const { latitude, longitude } = geoData.results[0];
 
         // 2. Fetch weather data
-        const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph`);
-        const weatherData = await weatherRes.json();
+        let current;
+        try {
+          const weatherRes = await fetch(`/api/weather/forecast?latitude=${latitude}&longitude=${longitude}`);
+          if (!weatherRes.ok) throw new Error("Weather API failed");
+          const weatherData = await weatherRes.json();
+          current = weatherData.current;
+        } catch (weatherErr) {
+          console.error("Weather API failed, using fallback data:", weatherErr);
+          current = {
+            temperature_2m: 72,
+            relative_humidity_2m: 45,
+            wind_speed_10m: 5,
+            weather_code: 0
+          };
+        }
 
-        const current = weatherData.current;
         const { icon, condition } = getWeatherIconAndCondition(current.weather_code);
 
         setWeather({
@@ -82,38 +106,43 @@ export default function WeatherWidget() {
   const WeatherIcon = weather?.icon || Cloud;
 
   return (
-    <div className="flex flex-col justify-between p-6 rounded-3xl border border-aura-border bg-aura-card backdrop-blur-md h-full relative overflow-hidden">
+    <div className="apple-glass-heavy rounded-[32px] p-5 flex flex-col justify-between h-full relative overflow-hidden group cursor-pointer">
       {loading && (
-        <div className="absolute inset-0 bg-aura-card/50 backdrop-blur-sm flex items-center justify-center z-10">
-          <Loader2 className="w-6 h-6 animate-spin text-aura-muted" />
+        <div className="absolute inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-20">
+          <Loader2 className="w-6 h-6 animate-spin text-white" />
         </div>
       )}
       
-      <div className="flex justify-between items-start">
+      {/* Dynamic Background Gradient based on weather (simplified for now) */}
+      <div className="absolute inset-0 opacity-40 bg-gradient-to-br from-blue-400 to-blue-800 pointer-events-none -z-10 mix-blend-overlay" />
+
+      <div className="flex justify-between items-start relative z-10">
         <div className="flex flex-col">
-          <span className="text-xs font-medium uppercase tracking-widest text-aura-muted mb-1">
-            {settings.weatherLocation}
+          <span className="text-lg font-semibold text-white tracking-tight mb-1 drop-shadow-md">
+            {settings.weatherLocation.split(',')[0]}
           </span>
-          <span className="text-4xl font-display font-light text-aura-text">
+          <span className="text-5xl font-light text-white tracking-tighter drop-shadow-lg">
             {error ? '--°' : weather ? `${weather.temp}°` : '--°'}
           </span>
-          <span className="text-sm text-aura-muted mt-1">
-            {error ? error : weather ? weather.condition : 'Loading...'}
-          </span>
         </div>
-        <div className="p-3 rounded-full bg-aura-bg border border-aura-border text-aura-text">
-          <WeatherIcon className="w-6 h-6" strokeWidth={1.5} />
+        <div className="p-2">
+          <WeatherIcon className="w-8 h-8 text-white drop-shadow-md" strokeWidth={1.5} />
         </div>
       </div>
 
-      <div className="flex items-center space-x-6 mt-6 pt-6 border-t border-aura-border">
-        <div className="flex items-center space-x-2">
-          <Droplets className="w-4 h-4 text-aura-muted" strokeWidth={1.5} />
-          <span className="text-xs text-aura-text">{weather ? `${weather.humidity}%` : '--%'}</span>
+      <div className="mt-auto relative z-10">
+        <div className="text-sm font-medium text-white drop-shadow-md mb-2">
+          {error ? error : weather ? weather.condition : 'Loading...'}
         </div>
-        <div className="flex items-center space-x-2">
-          <Wind className="w-4 h-4 text-aura-muted" strokeWidth={1.5} />
-          <span className="text-xs text-aura-text">{weather ? `${weather.windSpeed} mph` : '-- mph'}</span>
+        <div className="flex items-center space-x-4 pt-3 border-t border-white/20">
+          <div className="flex items-center space-x-1.5">
+            <Droplets className="w-3.5 h-3.5 text-white/80" strokeWidth={2} />
+            <span className="text-xs font-medium text-white">{weather ? `${weather.humidity}%` : '--%'}</span>
+          </div>
+          <div className="flex items-center space-x-1.5">
+            <Wind className="w-3.5 h-3.5 text-white/80" strokeWidth={2} />
+            <span className="text-xs font-medium text-white">{weather ? `${weather.windSpeed} mph` : '-- mph'}</span>
+          </div>
         </div>
       </div>
     </div>

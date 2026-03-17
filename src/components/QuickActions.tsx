@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
+import { triggerHaptic } from "../utils/haptics";
+import { useSettings } from "../contexts/SettingsContext";
 
 const ACTIONS = [
   {
@@ -71,6 +73,7 @@ const ACTIONS = [
 ];
 
 export default function QuickActions() {
+  const { settings } = useSettings();
   const [activeActions, setActiveActions] = useState<Record<string, boolean>>({
     lights: true,
     security: true,
@@ -78,6 +81,9 @@ export default function QuickActions() {
   });
 
   const toggleAction = (id: string) => {
+    if (settings.hapticsEnabled) {
+      triggerHaptic('light');
+    }
     setActiveActions((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
@@ -93,10 +99,10 @@ export default function QuickActions() {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => toggleAction(action.id)}
-            className={`flex flex-col items-center justify-center p-6 rounded-3xl border transition-colors duration-300 ${
+            className={`flex flex-col items-center justify-center p-6 rounded-[28px] border transition-colors duration-300 ${
               isActive
-                ? `border-aura-border ${action.activeBg}`
-                : "border-aura-border bg-aura-card hover:bg-aura-card-hover"
+                ? `border-transparent ${action.activeBg} shadow-sm`
+                : "border-black/5 dark:border-white/10 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10"
             }`}
           >
             <Icon
@@ -106,14 +112,14 @@ export default function QuickActions() {
               strokeWidth={1.5}
             />
             <span
-              className={`text-xs font-medium uppercase tracking-wider transition-colors duration-300 ${
+              className={`text-xs font-semibold uppercase tracking-wider transition-colors duration-300 ${
                 isActive ? "text-aura-text" : "text-aura-muted"
               }`}
             >
               {action.label}
             </span>
             <span
-              className={`text-[10px] mt-1 transition-colors duration-300 ${
+              className={`text-[10px] font-medium mt-1 transition-colors duration-300 ${
                 isActive ? "text-aura-muted" : "opacity-50 text-aura-muted"
               }`}
             >

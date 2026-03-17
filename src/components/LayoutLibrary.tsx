@@ -2,7 +2,6 @@ import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { X, LayoutTemplate, Download, CheckCircle2, Sparkles, Loader2 } from "lucide-react";
 import { useSettings } from "../contexts/SettingsContext";
-import { GoogleGenAI, Type } from "@google/genai";
 
 interface LayoutLibraryProps {
   isOpen: boolean;
@@ -92,44 +91,20 @@ export default function LayoutLibrary({ isOpen, onClose }: LayoutLibraryProps) {
     generatingRef.current = true;
     setIsGenerating(true);
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) return;
-
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: "Generate 2 unique, highly creative dashboard layout concepts for a smart home/lifestyle app. Available widgets: quickActions, smartHome, weather, media, integrations, calendar, notion, googleCalendar, clock, tasks, finance, health, threed. Return JSON array of objects with keys: id (unique string), name (string), description (string), author (string, e.g. 'AI Architect'), downloads (string like '10K'), activeWidgets (array of strings from available widgets), layout (array of objects with id, column (1 or 2), order (number)).",
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                name: { type: Type.STRING },
-                description: { type: Type.STRING },
-                author: { type: Type.STRING },
-                downloads: { type: Type.STRING },
-                activeWidgets: { type: Type.ARRAY, items: { type: Type.STRING } },
-                layout: { 
-                  type: Type.ARRAY, 
-                  items: { 
-                    type: Type.OBJECT, 
-                    properties: { 
-                      id: { type: Type.STRING }, 
-                      column: { type: Type.NUMBER }, 
-                      order: { type: Type.NUMBER } 
-                    } 
-                  } 
-                }
-              }
-            }
-          }
-        }
+      const response = await fetch('https://text.pollinations.ai/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: 'You are a JSON generator. Return ONLY a valid JSON array of objects. Do not include markdown formatting or any other text.' },
+            { role: 'user', content: "Generate 2 unique, highly creative dashboard layout concepts for a smart home/lifestyle app. Available widgets: quickActions, smartHome, weather, media, integrations, calendar, notion, googleCalendar, clock, finance, threed. Return JSON array of objects with keys: id (unique string), name (string), description (string), author (string, e.g. 'AI Architect'), downloads (string like '10K'), activeWidgets (array of strings from available widgets), layout (array of objects with id, column (1 or 2), order (number))." }
+          ],
+          jsonMode: true
+        })
       });
 
-      let text = response.text?.trim() || "[]";
+      let text = await response.text();
+      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
       let newLayouts = [];
       
       try {

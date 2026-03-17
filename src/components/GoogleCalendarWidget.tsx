@@ -61,21 +61,21 @@ export default function GoogleCalendarWidget() {
   }, []);
 
   return (
-    <div className="bg-aura-card border border-aura-border rounded-[2rem] p-6 h-full flex flex-col">
+    <div className="apple-glass-heavy border border-black/5 dark:border-white/10 rounded-[32px] p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-3">
           <div className="p-2.5 bg-blue-500/10 rounded-xl border border-blue-500/20">
-            <CalendarIcon className="w-5 h-5 text-blue-400" />
+            <CalendarIcon className="w-5 h-5 text-blue-500" />
           </div>
           <div>
-            <h2 className="text-lg font-display font-medium text-aura-text">Google Calendar</h2>
-            <p className="text-xs text-aura-muted">Today's Schedule</p>
+            <h2 className="text-lg font-semibold tracking-tight text-aura-text">Google Calendar</h2>
+            <p className="text-xs font-medium text-aura-muted">Today's Schedule</p>
           </div>
         </div>
         <button 
           onClick={fetchCalendarData}
           disabled={loading}
-          className="p-2 hover:bg-white/5 rounded-full transition-colors disabled:opacity-50"
+          className="p-2 hover:bg-black/10 dark:hover:bg-white/10 rounded-full transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 text-aura-muted ${loading ? 'animate-spin' : ''}`} />
         </button>
@@ -83,17 +83,17 @@ export default function GoogleCalendarWidget() {
 
       <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3">
         {error ? (
-          <div className="text-sm text-red-400 p-4 bg-red-500/10 rounded-xl border border-red-500/20">
+          <div className="text-sm text-red-500 p-4 bg-red-500/10 rounded-2xl border border-red-500/20">
             {error}
           </div>
         ) : loading && events.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : events.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-aura-muted">
             <CalendarIcon className="w-8 h-8 mb-2 opacity-50" />
-            <p className="text-sm">No more events today</p>
+            <p className="text-sm font-medium">No more events today</p>
           </div>
         ) : (
           events.map(event => (
@@ -101,22 +101,22 @@ export default function GoogleCalendarWidget() {
               key={event.id}
               className={`group flex items-center p-4 rounded-2xl border transition-all cursor-pointer ${
                 event.isNow 
-                  ? 'bg-blue-500/10 border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.1)]' 
-                  : 'bg-black/20 border-white/5 hover:bg-white/5'
+                  ? 'bg-blue-500/10 border-blue-500/30 shadow-sm' 
+                  : 'bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/10 hover:bg-black/10 dark:hover:bg-white/10'
               }`}
             >
               <div className={`w-1.5 h-10 rounded-full ${event.color} mr-4 shrink-0`} />
               <div className="flex-1 min-w-0">
-                <h3 className={`text-sm font-medium truncate transition-colors ${
-                  event.isNow ? 'text-blue-400' : 'text-aura-text group-hover:text-blue-400'
+                <h3 className={`text-sm font-semibold truncate transition-colors ${
+                  event.isNow ? 'text-blue-500' : 'text-aura-text group-hover:text-blue-500'
                 }`}>
                   {event.title}
                 </h3>
-                <div className="flex items-center text-xs text-aura-muted mt-1">
+                <div className="flex items-center text-xs font-medium text-aura-muted mt-1">
                   <Clock className="w-3 h-3 mr-1" />
                   {event.time}
                   {event.isNow && (
-                    <span className="ml-2 px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded text-[9px] uppercase tracking-wider font-bold animate-pulse">
+                    <span className="ml-2 px-1.5 py-0.5 bg-blue-500/20 text-blue-500 rounded text-[9px] uppercase tracking-wider font-bold animate-pulse">
                       Now
                     </span>
                   )}
@@ -128,8 +128,8 @@ export default function GoogleCalendarWidget() {
         )}
       </div>
       
-      <div className="mt-4 pt-4 border-t border-white/5">
-        <p className="text-[10px] text-aura-muted text-center">
+      <div className="mt-4 pt-4 border-t border-black/5 dark:border-white/10">
+        <p className="text-[10px] font-medium text-aura-muted text-center">
           Requires Google OAuth Client ID and Calendar API scope.
         </p>
       </div>

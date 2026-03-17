@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
-import { Mic, Volume2, Sparkles, X, Video, Camera } from 'lucide-react';
+import { Mic, Volume2, Sparkles, X, Video, Camera, Timer as TimerIcon, Focus, Coffee, Moon } from 'lucide-react';
 import { useAi } from '../contexts/AiContext';
+import { useTimers } from '../contexts/TimersContext';
+import { useSettings } from '../contexts/SettingsContext';
 
 export default function DynamicIsland() {
   const { status, transcript, isVideoCall, videoStream, startSession, stopSession } = useAi();
+  const { activeTimer } = useTimers();
+  const { settings } = useSettings();
   const islandRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const orbRef = useRef<HTMLDivElement>(null);
@@ -29,6 +33,36 @@ export default function DynamicIsland() {
         })
         .to(contentRef.current, { opacity: 1, display: 'flex' }, '<0.1')
         .to(orbRef.current, { scale: 0.8, opacity: 0.8 }, '<');
+      } else if (activeTimer) {
+        // Timer active state
+        tl.to(islandRef.current, {
+          width: 160,
+          height: 40,
+          borderRadius: 20,
+          backgroundColor: 'rgba(20,20,20,0.95)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          rotationX: 0,
+          rotationY: 0,
+          z: 0,
+          ease: 'elastic.out(1, 0.7)',
+        })
+        .to(contentRef.current, { opacity: 1, display: 'flex' }, '<0.1')
+        .to(orbRef.current, { scale: 0.5, opacity: 0.5 }, '<');
+      } else if (settings.autopilotMode !== 'off') {
+        // Focus mode active state
+        tl.to(islandRef.current, {
+          width: 160,
+          height: 40,
+          borderRadius: 20,
+          backgroundColor: 'rgba(20,20,20,0.95)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          rotationX: 0,
+          rotationY: 0,
+          z: 0,
+          ease: 'elastic.out(1, 0.7)',
+        })
+        .to(contentRef.current, { opacity: 1, display: 'flex' }, '<0.1')
+        .to(orbRef.current, { scale: 0.5, opacity: 0.5 }, '<');
       } else {
         // Small pill state
         tl.to(islandRef.current, {
@@ -88,7 +122,7 @@ export default function DynamicIsland() {
       });
     }
 
-  }, [status, isHovered, isVideoCall]);
+  }, [status, isHovered, isVideoCall, activeTimer]);
 
   // Orb animation loop
   useEffect(() => {
@@ -118,8 +152,14 @@ export default function DynamicIsland() {
     }
   }, [status]);
 
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   return (
-    <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 flex justify-center perspective-1000">
+    <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[130] flex justify-center perspective-1000">
       <div 
         ref={islandRef}
         onMouseEnter={() => setIsHovered(true)}
@@ -129,7 +169,7 @@ export default function DynamicIsland() {
             setIsHovered(!isHovered);
           }
         }}
-        className={`bg-black/80 backdrop-blur-2xl border border-white/10 overflow-hidden flex flex-col relative transform-style-3d shadow-2xl transition-colors ${status === 'idle' ? 'cursor-pointer hover:bg-black/90' : ''}`}
+        className={`bg-black/80 dark:bg-black/90 backdrop-blur-2xl border border-white/10 dark:border-white/5 overflow-hidden flex flex-col relative transform-style-3d shadow-2xl transition-colors ${status === 'idle' ? 'cursor-pointer hover:bg-black/90 dark:hover:bg-black' : ''}`}
         style={{ width: 120, height: 40, borderRadius: 20, touchAction: 'manipulation' }}
       >
         <div className="flex items-center justify-between px-4 h-full min-h-[40px] w-full">
@@ -137,10 +177,17 @@ export default function DynamicIsland() {
           <div className="absolute left-4 top-5 -translate-y-1/2 flex items-center justify-center z-10">
             <div 
               ref={orbRef}
-              className="w-6 h-6 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 blur-sm"
+              className={`w-6 h-6 rounded-full blur-sm ${status === 'idle' && (activeTimer || settings.autopilotMode !== 'off') && !isHovered ? 'bg-orange-500' : 'bg-gradient-to-tr from-blue-500 to-purple-500'}`}
             />
             <div className="absolute inset-0 flex items-center justify-center">
-               {status === 'idle' ? <Sparkles className="w-3 h-3 text-white" /> : 
+               {status === 'idle' ? (
+                 (activeTimer && !isHovered) ? <TimerIcon className="w-3 h-3 text-white" /> : 
+                 (settings.autopilotMode !== 'off' && !isHovered) ? (
+                   settings.autopilotMode === 'focus' ? <Focus className="w-3 h-3 text-white" /> :
+                   settings.autopilotMode === 'relax' ? <Coffee className="w-3 h-3 text-white" /> :
+                   <Moon className="w-3 h-3 text-white" />
+                 ) : <Sparkles className="w-3 h-3 text-white" />
+               ) : 
                 status === 'speaking' ? <Volume2 className="w-3 h-3 text-white" /> : 
                 <Mic className="w-3 h-3 text-white" />}
             </div>
@@ -152,30 +199,44 @@ export default function DynamicIsland() {
             className="ml-12 flex-1 flex items-center justify-between opacity-0 hidden z-10"
           >
             {status === 'idle' ? (
-              <div className="flex items-center justify-between w-full pr-2">
-                <span className="text-sm font-medium text-white/80">Start Session</span>
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); startSession(false); }}
-                    className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
-                  >
-                    <Mic className="w-4 h-4" />
-                  </button>
-                  <button 
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); startSession(true); }}
-                    className="p-2 bg-blue-500/20 hover:bg-blue-500/40 rounded-full text-blue-400 transition-colors"
-                  >
-                    <Video className="w-4 h-4" />
-                  </button>
+              isHovered ? (
+                <div className="flex items-center justify-between w-full pr-2">
+                  <span className="text-sm font-semibold tracking-tight text-white/90">Start Session</span>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); startSession(false); }}
+                      className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+                    >
+                      <Mic className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); startSession(true); }}
+                      className="p-2 bg-blue-500/20 hover:bg-blue-500/40 rounded-full text-blue-400 transition-colors"
+                    >
+                      <Video className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : activeTimer ? (
+                <div className="flex items-center justify-between w-full pr-2">
+                  <span className="text-sm font-semibold text-orange-400 font-mono tracking-wider">
+                    {formatTime(activeTimer.remaining)}
+                  </span>
+                </div>
+              ) : settings.autopilotMode !== 'off' ? (
+                <div className="flex items-center justify-between w-full pr-2">
+                  <span className="text-sm font-semibold text-orange-400 tracking-wider capitalize">
+                    {settings.autopilotMode} Mode
+                  </span>
+                </div>
+              ) : null
             ) : (
               <>
                 <div className="flex flex-col justify-center overflow-hidden">
-                  <span className="text-xs font-medium text-white/50 uppercase tracking-wider">
+                  <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">
                     {status === 'listening' ? 'Listening...' : status === 'speaking' ? 'AVA is speaking' : status}
                   </span>
-                  <span className="text-sm text-white truncate max-w-[200px]">
+                  <span className="text-sm font-medium text-white truncate max-w-[200px]">
                     {transcript || 'Say "AVA" to wake'}
                   </span>
                 </div>

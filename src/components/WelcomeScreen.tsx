@@ -59,8 +59,8 @@ export default function WelcomeScreen() {
               <Sparkles className="w-12 h-12 text-blue-400" />
             </div>
           </div>
-          <h1 className="text-5xl font-display font-medium mb-4">Havenly</h1>
-          <p className="text-aura-muted text-lg">Your intelligent home sanctuary.</p>
+          <h1 className="text-5xl font-semibold tracking-tight mb-4">Havenly</h1>
+          <p className="text-aura-muted text-lg font-medium">Your intelligent home sanctuary.</p>
         </motion.div>
 
         <motion.div
